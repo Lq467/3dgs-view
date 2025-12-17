@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>3DGS 终极修正版</title>
+    <title>3DGS 终极修复版</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
         
@@ -14,7 +14,6 @@
             z-index: 999; pointer-events: none;
         }
 
-        /* 底部控制面板 */
         #ui-panel {
             position: absolute; bottom: 0; left: 0; width: 100%;
             background: rgba(0,0,0,0.85); padding: 15px; box-sizing: border-box;
@@ -30,9 +29,7 @@
         .slider-row input { flex: 1; margin: 0 10px; }
         .slider-row span { width: 30px; text-align: right; color: #aaa; }
 
-        .btn-row {
-            display: flex; justify-content: center; margin-top: 5px;
-        }
+        .btn-row { display: flex; justify-content: center; margin-top: 5px; }
 
         #gyro-btn {
             padding: 12px 30px; font-size: 16px; border-radius: 25px; border: none;
@@ -60,13 +57,13 @@
     <div id="status-bar">准备加载...</div>
 
     <div id="ui-panel" style="display:none">
-        <!-- 距离滑杆：帮你拉远相机，看清全貌 -->
+        <!-- 距离滑杆：看不到模型就往右拉！ -->
         <div class="slider-row">
             <label>距离</label>
             <input type="range" id="cam-dist" min="1" max="100" step="1" value="5">
             <span id="dist-val">5</span>
         </div>
-        <!-- 缩放滑杆：如果模型太大就缩小 -->
+        <!-- 缩放滑杆：控制模型大小 -->
         <div class="slider-row">
             <label>缩放</label>
             <input type="range" id="model-scale" min="0.1" max="5" step="0.1" value="1">
@@ -89,7 +86,6 @@
         const uiPanel = document.getElementById('ui-panel');
         const gyroBtn = document.getElementById('gyro-btn');
         
-        // 滑杆
         const distSlider = document.getElementById('cam-dist');
         const scaleSlider = document.getElementById('model-scale');
         const distVal = document.getElementById('dist-val');
@@ -100,24 +96,21 @@
         let isGyroActive = false;
         let initialGyro = null;
         
-        // 陀螺仪灵敏度 & 角度限制
-        const CLAMP_X = 0.6; // 上下
-        const CLAMP_Y = 0.8; // 左右
+        const CLAMP_X = 0.6; 
+        const CLAMP_Y = 0.8; 
 
         async function main() {
-            // 1. 初始化引擎
             viewer = new Viewer({
                 'cameraUp': [0, 1, 0],
-                // 初始把相机放远点 (Z=5)
                 'initialCameraPosition': [0, 1, 5], 
                 'initialCameraLookAt': [0, 0, 0],
-                'useBuiltInControls': true, // 开启触摸
+                'useBuiltInControls': true, 
                 'sharedMemoryForWorkers': false,
             });
             document.body.appendChild(viewer.renderer.domElement);
 
             try {
-                // 2. 手动下载
+                // 1. 手动下载
                 status.innerText = "🚀 正在下载...";
                 const response = await fetch(MODEL_URL);
                 if (!response.ok) throw new Error("下载失败: " + response.status);
@@ -138,24 +131,26 @@
                 }
 
                 status.innerText = "⚙️ 处理数据...";
-                
-                // 3. 生成 Blob URL
                 const blob = new Blob(chunks);
                 const originalUrl = URL.createObjectURL(blob);
                 
-                // 🔴 关键修复：在链接后面拼上 #.splat
-                // 这样既是字符串(String)，又以 .splat 结尾，引擎才会通过
+                // 2. 后缀欺骗
                 const fakeUrl = originalUrl + '#.splat';
 
-                // 4. 加载场景
-                const scenes = await viewer.addSplatScene(fakeUrl, {
+                // 3. 加载场景 (不接收返回值)
+                await viewer.addSplatScene(fakeUrl, {
                     'showLoadingUI': false,
-                    'splatAlphaRemovalThreshold': 2, // 移除杂点
+                    'splatAlphaRemovalThreshold': 2, 
                 });
                 
-                splatScene = scenes[0]; // 拿到模型引用方便缩放
+                // 🔴 核心修复：直接通过 viewer 获取刚才加载的场景
+                splatScene = viewer.getSplatScene(0);
 
-                status.innerText = "✅ 加载成功！请调节下方滑杆";
+                if (!splatScene) {
+                    console.warn("未获取到场景对象，缩放功能可能失效");
+                }
+
+                status.innerText = "✅ 加载成功！";
                 setTimeout(() => { status.style.display = 'none'; }, 2000);
                 
                 uiPanel.style.display = 'block';
@@ -168,43 +163,30 @@
             }
         }
 
-        // ================= 滑杆逻辑 =================
+        // ================= 交互逻辑 =================
         
-        // 调节相机距离
         distSlider.addEventListener('input', (e) => {
             const val = parseFloat(e.target.value);
             distVal.innerText = val;
-            
-            // 移动相机 Z 轴
             viewer.camera.position.z = val;
             viewer.camera.lookAt(0, 0, 0);
-            
-            // 更新控制器中心点
             if (viewer.controls) viewer.controls.update();
         });
 
-        // 调节模型大小
         scaleSlider.addEventListener('input', (e) => {
             if (!splatScene) return;
             const val = parseFloat(e.target.value);
             scaleVal.innerText = val;
-            
-            // 实时缩放
             splatScene.scale.set(val, val, val);
         });
-
-        // ================= 陀螺仪逻辑 =================
 
         gyroBtn.addEventListener('click', () => {
             if (!isGyroActive) {
                 requestGyro();
             } else {
-                // 关闭陀螺仪
                 isGyroActive = false;
                 gyroBtn.classList.remove('active');
                 gyroBtn.innerText = "🧭 开启陀螺仪";
-                
-                // 恢复触摸
                 if (viewer.controls) viewer.controls.enabled = true;
                 window.removeEventListener('deviceorientation', handleOrientation);
             }
@@ -231,16 +213,12 @@
             initialGyro = null;
             gyroBtn.classList.add('active');
             gyroBtn.innerText = "🛑 关闭陀螺仪";
-            
-            // ❌ 必须禁用触摸，否则和陀螺仪冲突
             if (viewer.controls) viewer.controls.enabled = false;
-            
             window.addEventListener('deviceorientation', handleOrientation);
         }
 
         function handleOrientation(event) {
             if (!viewer || !isGyroActive) return;
-
             if (!initialGyro && event.alpha !== null) {
                 initialGyro = { beta: event.beta, gamma: event.gamma };
                 return;
@@ -249,8 +227,6 @@
 
             let deltaX = (event.beta - initialGyro.beta) * (Math.PI / 180);
             let deltaY = (event.gamma - initialGyro.gamma) * (Math.PI / 180);
-
-            // 限制防穿帮
             deltaX = Math.max(-CLAMP_X, Math.min(CLAMP_X, deltaX));
             deltaY = Math.max(-CLAMP_Y, Math.min(CLAMP_Y, deltaY));
 
