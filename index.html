@@ -39,8 +39,8 @@
         import * as THREE from 'three';
         import { Viewer } from '@mkkellogg/gaussian-splats-3d';
 
-        // 👇 这里填你的链接 (带不带 ?download=true 都可以了，因为下面加了 format 锁)
-        const MODEL_FILE = 'https://huggingface.co/datasets/liu1230/my-3dgs/resolve/main/scene.splat?download=true';
+        // 🟢 核心修改：去掉了 ?download=true，让引擎能识别出 .splat 后缀
+        const MODEL_FILE = 'https://huggingface.co/datasets/liu1230/my-3dgs/resolve/main/scene.splat';
 
         const status = document.getElementById('status-bar');
         const btn = document.getElementById('start-btn');
@@ -64,9 +64,10 @@
             status.innerText = "正在请求文件...";
             
             try {
+                // 这里加了 format: 'splat' 双重保险
                 await viewer.addSplatScene(MODEL_FILE, {
                     'showLoadingUI': false,
-                    'format': 'splat',            // 🟢 关键修复：强制指定格式！
+                    'format': 'splat',
                     'splatAlphaRemovalThreshold': 5, 
                     'onProgress': (percent, percentStr) => {
                         if (percentStr === 'NaN') {
@@ -85,8 +86,6 @@
                 console.error(err);
                 status.innerText = "❌ 错误: " + err.message;
                 status.style.color = "red";
-                // 如果这里报 "Invalid splat file"，说明文件内容是网页而不是二进制
-                // 那就需要检查 Hugging Face 仓库是否是 Private
             }
         }
 
