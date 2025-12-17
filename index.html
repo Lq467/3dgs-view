@@ -3,24 +3,49 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>3DGS 终极通关版</title>
+    <title>3DGS 完美交互版</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
         
+        /* 顶部状态条 */
         #status-bar {
             position: absolute; top: 0; left: 0; width: 100%; 
-            padding: 15px; background: rgba(0,0,0,0.8); 
+            padding: 10px; background: rgba(0,0,0,0.6); 
             color: #0f0; text-align: center; font-size: 14px; 
             z-index: 999; pointer-events: none;
         }
 
-        #start-btn {
-            position: absolute; bottom: 15%; left: 50%; transform: translateX(-50%);
-            padding: 12px 30px; font-size: 18px; border-radius: 25px;
-            background: white; border: none; cursor: pointer; display: none;
-            z-index: 1000;
+        /* 底部控制区 */
+        #controls {
+            position: absolute; bottom: 30px; left: 0; width: 100%;
+            display: flex; justify-content: center; gap: 20px;
+            z-index: 1000; pointer-events: none; /* 让点击穿透到按钮 */
+        }
+
+        /* 按钮样式 */
+        .btn {
+            pointer-events: auto;
+            padding: 12px 24px; font-size: 16px; font-weight: bold;
+            border-radius: 30px; border: none; cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            transition: all 0.2s;
+        }
+
+        /* 陀螺仪按钮 */
+        #gyro-btn {
+            background: #444; color: white; border: 2px solid #666;
+        }
+        #gyro-btn.active {
+            background: #0f0; color: black; border-color: #0f0;
+            box-shadow: 0 0 15px #0f0;
+        }
+
+        /* 重置视角按钮 */
+        #reset-btn {
+            background: white; color: black;
         }
     </style>
+    
     <!-- 引用 v0.4.7 引擎 -->
     <script type="importmap">
     {
@@ -34,37 +59,48 @@
 </head>
 <body>
 
-    <div id="status-bar">准备就绪...</div>
-    <button id="start-btn">开启陀螺仪</button>
+    <div id="status-bar">准备加载...</div>
+
+    <div id="controls">
+        <button id="reset-btn" class="btn" style="display:none">👀 重置视角</button>
+        <button id="gyro-btn" class="btn" style="display:none">🧭 开启陀螺仪</button>
+    </div>
 
     <script type="module">
         import * as THREE from 'three';
         import { Viewer } from '@mkkellogg/gaussian-splats-3d';
 
-        // 你的 HF 直链
+        // 👇 你的 HF 直链
         const MODEL_URL = 'https://huggingface.co/datasets/liu1230/my-3dgs/resolve/main/scene.splat';
 
         const status = document.getElementById('status-bar');
-        const btn = document.getElementById('start-btn');
+        const gyroBtn = document.getElementById('gyro-btn');
+        const resetBtn = document.getElementById('reset-btn');
+        
         let viewer;
-        let isRunning = false;
+        let isGyroActive = false;
         let initialGyro = null;
         
-        const CLAMP_X = 0.5; 
-        const CLAMP_Y = 0.6; 
+        // 陀螺仪限制角度
+        const CLAMP_X = 0.6; 
+        const CLAMP_Y = 0.8; 
 
         async function main() {
+            // 1. 初始化引擎
             viewer = new Viewer({
                 'cameraUp': [0, 1, 0],
-                'initialCameraPosition': [0, 1, 4],
+                // 🟢 修复局部显示：把相机拉远一点 (z=5)，抬高一点 (y=1)
+                'initialCameraPosition': [0, 1, 5], 
                 'initialCameraLookAt': [0, 0, 0],
+                // 启用内置触摸控制器 (OrbitControls)
+                'useBuiltInControls': true,
                 'sharedMemoryForWorkers': false,
             });
             document.body.appendChild(viewer.renderer.domElement);
 
             try {
-                // 1. 手动下载
-                status.innerText = "🚀 正在下载模型数据...";
+                // 2. 下载并加载 (使用 Blob + 后缀欺骗法)
+                status.innerText = "🚀 正在下载模型...";
                 const response = await fetch(MODEL_URL);
                 if (!response.ok) throw new Error("下载失败: " + response.status);
 
@@ -83,32 +119,27 @@
                     status.innerText = `📥 下载中... ${progress}`;
                 }
 
-                status.innerText = "⚙️ 正在处理数据...";
-                
-                // 2. 核心修改：生成 Blob URL 并加上【欺骗后缀】
+                status.innerText = "⚙️ 解析模型中...";
                 const blob = new Blob(chunks);
                 const originalUrl = URL.createObjectURL(blob);
-                
-                // 👇【关键一步】在链接后面强行加上 #.splat
-                // 引擎看到 .splat 才会开心，而浏览器下载时会忽略 # 后面的内容
-                const fakeUrl = originalUrl + '#.splat';
+                const fakeUrl = originalUrl + '#.splat'; // 欺骗引擎后缀
 
-                status.innerText = "🎬 引擎加载中...";
-
-                // 3. 把这个“带假发”的链接传进去
                 await viewer.addSplatScene(fakeUrl, {
                     'showLoadingUI': false,
-                    'splatAlphaRemovalThreshold': 5, 
+                    // 🟢 修复局部显示：减小透明度阈值，让更多细节显示出来
+                    'splatAlphaRemovalThreshold': 1, 
                     'scale': [1, 1, 1],
                     'rotation': [0, 0, 0, 1]
                 });
 
                 status.innerText = "✅ 加载成功！";
-                status.style.color = "#fff";
-                btn.style.display = "block";
+                setTimeout(() => { status.style.display = 'none'; }, 2000);
                 
-                // 清理内存（注意：这里不能马上 revoke，因为引擎还在读，稍微延迟一点）
-                setTimeout(() => URL.revokeObjectURL(originalUrl), 10000);
+                // 显示按钮
+                gyroBtn.style.display = 'block';
+                resetBtn.style.display = 'block';
+                
+                viewer.start();
 
             } catch (err) {
                 console.error(err);
@@ -117,12 +148,39 @@
             }
         }
 
-        btn.addEventListener('click', () => {
-            btn.style.display = 'none';
-            status.style.display = 'none';
-            viewer.start();
-            isRunning = true;
-            requestGyro();
+        // ================= 交互逻辑 =================
+
+        // 1. 重置视角 (帮你找回模型)
+        resetBtn.addEventListener('click', () => {
+            // 强制把相机搬回初始位置
+            viewer.camera.position.set(0, 1, 5);
+            viewer.camera.lookAt(0, 0, 0);
+            
+            // 如果你在乱转的时候找不到模型了，点这个
+            if (viewer.controls) {
+                viewer.controls.target.set(0, 0, 0);
+                viewer.controls.update();
+            }
+        });
+
+        // 2. 陀螺仪开关
+        gyroBtn.addEventListener('click', () => {
+            if (!isGyroActive) {
+                // === 开启陀螺仪 ===
+                requestGyro();
+            } else {
+                // === 关闭陀螺仪 ===
+                isGyroActive = false;
+                gyroBtn.classList.remove('active');
+                gyroBtn.innerText = "🧭 开启陀螺仪";
+                status.style.display = 'block';
+                status.innerText = "✋ 已切换回触摸模式";
+                setTimeout(() => status.style.display = 'none', 1500);
+                
+                // 恢复触摸控制
+                if (viewer.controls) viewer.controls.enabled = true;
+                window.removeEventListener('deviceorientation', handleOrientation);
+            }
         });
 
         function requestGyro() {
@@ -131,29 +189,55 @@
                 DeviceOrientationEvent.requestPermission()
                     .then(response => {
                         if (response === 'granted') {
-                            window.addEventListener('deviceorientation', handleOrientation);
+                            activateGyro();
                         } else {
-                            alert('需要允许陀螺仪权限');
+                            alert('需要允许权限才能使用陀螺仪');
                         }
                     }).catch(console.error);
             } else {
-                window.addEventListener('deviceorientation', handleOrientation);
+                activateGyro();
             }
         }
 
+        function activateGyro() {
+            isGyroActive = true;
+            initialGyro = null; // 重置零点
+            
+            // 视觉反馈
+            gyroBtn.classList.add('active');
+            gyroBtn.innerText = "🛑 关闭陀螺仪";
+            status.style.display = 'block';
+            status.innerText = "📱 陀螺仪已接管 (触摸暂停)";
+            
+            // 禁用触摸控制，防止冲突
+            if (viewer.controls) viewer.controls.enabled = false;
+            
+            window.addEventListener('deviceorientation', handleOrientation);
+        }
+
         function handleOrientation(event) {
-            if (!viewer || !isRunning) return;
+            if (!viewer || !isGyroActive) return;
+
+            // 记录初始姿态
             if (!initialGyro && event.alpha !== null) {
                 initialGyro = { beta: event.beta, gamma: event.gamma };
                 return;
             }
             if (!initialGyro) return;
 
+            // 计算旋转量
             let deltaX = (event.beta - initialGyro.beta) * (Math.PI / 180);
             let deltaY = (event.gamma - initialGyro.gamma) * (Math.PI / 180);
+
+            // 限制范围 (防穿帮)
             deltaX = Math.max(-CLAMP_X, Math.min(CLAMP_X, deltaX));
             deltaY = Math.max(-CLAMP_Y, Math.min(CLAMP_Y, deltaY));
+
+            // 直接控制相机旋转
+            // 注意：这里我们使用 YXZ 顺序，更符合手机操作直觉
             viewer.camera.rotation.set(deltaX, deltaY, 0, 'YXZ');
+            
+            // 强制渲染更新
             viewer.update();
         }
 
