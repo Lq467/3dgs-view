@@ -3,46 +3,71 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3DGS 实体代理操作版</title>
+    <title>3DGS 全屏手势版</title>
     <style>
         body, html {
             width: 100%; height: 100%; margin: 0; padding: 0;
             overflow: hidden; background-color: #000;
-            touch-action: none; font-family: sans-serif; user-select: none;
+            touch-action: none; /* 禁止系统滚动 */
+            font-family: sans-serif; user-select: none;
         }
 
-        /* 顶部提示 */
-        #top-msg {
-            position: absolute; top: 10px; left: 0; width: 100%; text-align: center;
-            pointer-events: none; z-index: 1000;
+        /* 顶部操作说明 */
+        #header {
+            position: absolute; top: 20px; left: 0; width: 100%;
+            text-align: center; pointer-events: none; z-index: 1000;
         }
-        .msg-box {
-            background: rgba(255, 0, 0, 0.8); color: white; padding: 8px 15px;
-            border-radius: 20px; font-size: 14px; font-weight: bold; display: inline-block;
+        .status-pill {
+            background: rgba(30,30,30,0.9); color: #00ff88;
+            padding: 8px 20px; border-radius: 30px; font-size: 14px; font-weight: bold;
+            display: inline-block; border: 1px solid #555;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
         }
 
-        /* 底部操作区 */
+        /* 底部工具栏 */
         #dock {
             position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
-            background: #222; padding: 10px; border-radius: 16px;
-            display: flex; gap: 15px; border: 1px solid #444; z-index: 1000;
+            background: #1a1a1a; padding: 10px; border-radius: 20px;
+            display: flex; gap: 12px; border: 1px solid #444; z-index: 1000;
             box-shadow: 0 10px 40px rgba(0,0,0,0.8);
         }
 
         .btn {
-            width: 55px; height: 55px; background: #333; border: 1px solid #555;
-            border-radius: 12px; color: #aaa; font-size: 24px;
+            width: 60px; height: 60px; background: #333; border: 1px solid #444;
+            border-radius: 14px; color: #888; font-size: 24px;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
+            transition: all 0.1s; position: relative;
         }
-        .btn span { font-size: 10px; margin-top: 2px; }
-        .btn.active { background: #007bff; color: white; border-color: #00aaff; }
+        .btn span { font-size: 11px; margin-top: 4px; }
+        
+        .btn.active { background: #007bff; color: white; transform: scale(1.05); border-color: #00aaff; }
+        .btn.active.view { background: #00ff88; color: #000; border-color: #00ff88; }
+        .btn.active.edit { background: #ffaa00; color: #000; border-color: #ffaa00; }
 
-        /* 加载动画 */
+        /* 中心参考十字线 (仅编辑模式显示) */
+        #crosshair {
+            position: absolute; top: 50%; left: 50%; width: 20px; height: 20px;
+            transform: translate(-50%, -50%); pointer-events: none; z-index: 500;
+            display: none; opacity: 0.5;
+        }
+        #crosshair::before, #crosshair::after {
+            content: ''; position: absolute; background: white;
+        }
+        #crosshair::before { top: 9px; left: 0; width: 20px; height: 2px; }
+        #crosshair::after { top: 0; left: 9px; width: 2px; height: 20px; }
+
+        /* 触摸反馈圆点 */
+        #touch-feedback {
+            position: absolute; width: 40px; height: 40px;
+            border: 2px solid rgba(255,255,255,0.5); border-radius: 50%;
+            transform: translate(-50%, -50%); pointer-events: none; z-index: 9000;
+            display: none;
+        }
+
         #loader {
             position: absolute; top:0; left:0; width:100%; height:100%; background:#000;
             display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:9999;
         }
-        .loader-text { color: #0f0; margin-top: 20px; font-family: monospace; }
     </style>
 
     <script type="importmap">
@@ -58,26 +83,29 @@
 <body>
 
     <div id="loader">
-        <div style="font-size: 40px;">📦</div>
-        <div class="loader-text" id="load-text">正在构建实体容器...</div>
+        <div style="font-size:30px;">⏳</div>
+        <div style="color:#888; margin-top:10px;">资源加载中...</div>
     </div>
 
-    <div id="top-msg">
-        <div class="msg-box" id="status-label">请操作红色的盒子</div>
+    <div id="header">
+        <div class="status-pill" id="status">👀 浏览模式</div>
     </div>
+
+    <div id="crosshair"></div>
+    <div id="touch-feedback"></div>
 
     <div id="dock">
-        <button class="btn active" id="btn-view" onclick="app.setMode('view')">
+        <button class="btn active view" onclick="app.setMode('view')" id="btn-view">
             👁️<span>浏览</span>
         </button>
-        <div style="width:1px; background:#555;"></div>
-        <button class="btn" id="btn-translate" onclick="app.setMode('translate')">
+        <div style="width:1px; background:#444; margin:0 5px;"></div>
+        <button class="btn" onclick="app.setMode('translate')" id="btn-translate">
             ✢<span>移动</span>
         </button>
-        <button class="btn" id="btn-rotate" onclick="app.setMode('rotate')">
+        <button class="btn" onclick="app.setMode('rotate')" id="btn-rotate">
             ↻<span>旋转</span>
         </button>
-        <button class="btn" id="btn-scale" onclick="app.setMode('scale')">
+        <button class="btn" onclick="app.setMode('scale')" id="btn-scale">
             ⤢<span>缩放</span>
         </button>
     </div>
@@ -85,7 +113,6 @@
     <script type="module">
         import * as THREE from 'three';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-        import { TransformControls } from 'three/addons/controls/TransformControls.js';
         import { Viewer } from '@mkkellogg/gaussian-splats-3d';
 
         const MODEL_URL = 'https://huggingface.co/datasets/liu1230/my-3dgs/resolve/main/scene.splat';
@@ -93,126 +120,184 @@
         class App {
             constructor() {
                 this.viewer = null;
-                this.controls = null;
-                this.gizmo = null;
+                this.orbit = null;
+                this.container = null; // 我们的模型容器
+                this.helper = null;
+                this.mode = 'view';
                 
-                // 核心：这是一个实体的 BoxMesh，用来代替点云被点击
-                this.proxyBox = null; 
-                this.splatMesh = null;
+                // 触摸控制变量
+                this.isDragging = false;
+                this.lastX = 0;
+                this.lastY = 0;
             }
 
             async init() {
-                // 1. 初始化引擎
+                // 1. 初始化 Viewer (禁用一切自带控制)
                 this.viewer = new Viewer({
                     'cameraUp': [0, 1, 0],
-                    'initialCameraPosition': [0, 2, 5],
+                    'initialCameraPosition': [0, 1, 5],
                     'initialCameraLookAt': [0, 0, 0],
                     'useBuiltInControls': false, 
                     'selfDrivenMode': false,
                     'sharedMemoryForWorkers': false
                 });
-                
+
                 document.body.appendChild(this.viewer.renderer.domElement);
 
-                // 2. 创建一个“实体代理盒” (Proxy Box)
-                // 这是一个看得见、摸得着的红色半透明方块
-                const geometry = new THREE.BoxGeometry(2, 2, 2);
-                const material = new THREE.MeshBasicMaterial({ 
-                    color: 0xff0000, 
-                    wireframe: true,  // 线框模式，方便看里面的模型
-                    transparent: true, 
-                    opacity: 0.5,
-                    depthTest: false  // 保证永远显示在最前面
-                });
-                
-                this.proxyBox = new THREE.Mesh(geometry, material);
-                this.proxyBox.visible = false; // 初始隐藏，编辑模式才显示
-                this.viewer.threeScene.add(this.proxyBox);
+                // 2. 创建容器 (所有模型都放这里面)
+                this.container = new THREE.Group();
+                this.viewer.threeScene.add(this.container);
 
-                // 3. OrbitControls (相机)
-                this.controls = new OrbitControls(this.viewer.camera, this.viewer.renderer.domElement);
-                this.controls.enableDamping = true;
-                
-                // 4. TransformControls (坐标轴)
-                this.gizmo = new TransformControls(this.viewer.camera, this.viewer.renderer.domElement);
-                this.gizmo.setSize(1.2);
-                // 解决冲突：拖动坐标轴时，禁止相机转动
-                this.gizmo.addEventListener('dragging-changed', (e) => {
-                    this.controls.enabled = !e.value;
-                });
-                this.viewer.threeScene.add(this.gizmo);
+                // 3. OrbitControls (仅用于浏览模式)
+                this.orbit = new OrbitControls(this.viewer.camera, this.viewer.renderer.domElement);
+                this.orbit.enableDamping = true;
+                this.orbit.dampingFactor = 0.08;
 
-                // 5. 启动循环
+                // 4. 添加网格和包围盒(视觉辅助)
+                const grid = new THREE.GridHelper(20, 20, 0x333333, 0x111111);
+                grid.position.y = -1;
+                this.viewer.threeScene.add(grid);
+
+                this.helper = new THREE.BoxHelper(this.container, 0xffff00);
+                this.helper.visible = false;
+                this.viewer.threeScene.add(this.helper);
+
+                // 5. 绑定全屏触摸事件 (核心逻辑)
+                this.setupTouchInput();
+
+                // 6. 启动循环
                 this.animate();
 
-                // 6. 加载模型
+                // 7. 加载
                 await this.loadModel();
             }
 
+            setupTouchInput() {
+                const canvas = this.viewer.renderer.domElement;
+                const feedback = document.getElementById('touch-feedback');
+
+                // 触摸开始
+                canvas.addEventListener('pointerdown', (e) => {
+                    this.isDragging = true;
+                    this.lastX = e.clientX;
+                    this.lastY = e.clientY;
+                    
+                    // 显示触摸反馈
+                    if (this.mode !== 'view') {
+                        feedback.style.display = 'block';
+                        feedback.style.left = e.clientX + 'px';
+                        feedback.style.top = e.clientY + 'px';
+                    }
+                });
+
+                // 触摸移动
+                canvas.addEventListener('pointermove', (e) => {
+                    if (!this.isDragging) return;
+                    
+                    if (this.mode !== 'view') {
+                        // 更新反馈UI位置
+                        feedback.style.left = e.clientX + 'px';
+                        feedback.style.top = e.clientY + 'px';
+                        
+                        // 计算滑动距离 (Delta)
+                        const dx = e.clientX - this.lastX;
+                        const dy = e.clientY - this.lastY;
+                        
+                        // 应用变换 (核心：手指动，模型就动)
+                        this.applyTransform(dx, dy);
+                    }
+
+                    this.lastX = e.clientX;
+                    this.lastY = e.clientY;
+                });
+
+                // 触摸结束
+                const endDrag = () => {
+                    this.isDragging = false;
+                    feedback.style.display = 'none';
+                };
+                canvas.addEventListener('pointerup', endDrag);
+                canvas.addEventListener('pointerleave', endDrag);
+            }
+
+            applyTransform(dx, dy) {
+                // 移动速度系数
+                const moveSpeed = 0.01;
+                const rotSpeed = 0.005;
+                const scaleSpeed = 0.01;
+
+                if (this.mode === 'translate') {
+                    // 移动：手指滑多远，模型移多远
+                    // 获取相机朝向来决定移动方向（简单版：直接改XYZ）
+                    this.container.position.x += dx * moveSpeed;
+                    this.container.position.y -= dy * moveSpeed; 
+                } 
+                else if (this.mode === 'rotate') {
+                    // 旋转：左右滑绕Y轴转
+                    this.container.rotation.y += dx * rotSpeed;
+                    // 上下滑绕X轴转
+                    this.container.rotation.x += dy * rotSpeed;
+                } 
+                else if (this.mode === 'scale') {
+                    // 缩放：向上滑放大，向下滑缩小
+                    let s = this.container.scale.x - (dy * scaleSpeed);
+                    if (s < 0.1) s = 0.1; // 最小限制
+                    if (s > 10) s = 10;   // 最大限制
+                    this.container.scale.set(s, s, s);
+                }
+            }
+
             async loadModel() {
-                const txt = document.getElementById('load-text');
-                txt.innerText = "下载模型数据...";
-                
-                const resp = await fetch(MODEL_URL);
-                const blob = await resp.blob();
+                const response = await fetch(MODEL_URL);
+                const blob = await response.blob();
                 const url = URL.createObjectURL(blob) + '#.splat';
-                
-                txt.innerText = "注入代理容器...";
+
                 await this.viewer.addSplatScene(url, { 'showLoadingUI': false });
 
+                // 把 Splat 放入容器
                 setTimeout(() => {
-                    this.splatMesh = this.viewer.getSplatScene(0);
-                    if (this.splatMesh) {
-                        // ⚠️ 终极操作：把 Splat 模型塞进 ProxyBox 里
-                        // 这样 ProxyBox 动，Splat 必须动！
-                        this.proxyBox.add(this.splatMesh);
-                        
-                        // 调整一下 Splat 在盒子里的位置（通常居中）
-                        this.splatMesh.position.set(0, 0, 0);
-                        
+                    const splat = this.viewer.getSplatScene(0);
+                    if (splat) {
+                        this.container.add(splat);
                         document.getElementById('loader').style.display = 'none';
-                        this.setMode('view');
                     }
-                }, 500);
+                }, 200);
             }
 
             setMode(mode) {
-                // UI
-                document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
-                const btnId = mode === 'view' ? 'btn-view' : 'btn-' + mode;
-                document.getElementById(btnId).classList.add('active');
+                this.mode = mode;
+                
+                // UI 更新
+                document.querySelectorAll('.btn').forEach(b => b.classList.remove('active', 'view', 'edit'));
+                const btn = document.getElementById('btn-' + mode);
+                btn.classList.add('active', mode === 'view' ? 'view' : 'edit');
 
-                const label = document.getElementById('status-label');
+                const status = document.getElementById('status');
+                const crosshair = document.getElementById('crosshair');
 
                 if (mode === 'view') {
-                    // === 浏览模式 ===
-                    this.gizmo.detach();
-                    this.proxyBox.visible = false; // 隐藏红盒子
-                    this.controls.enabled = true;  // 允许转视角
-                    
-                    label.innerText = "👀 浏览模式：转动视角";
-                    label.style.backgroundColor = "rgba(0,0,0,0.6)";
+                    this.orbit.enabled = true; // 开启视角
+                    this.helper.visible = false;
+                    crosshair.style.display = 'none';
+                    status.innerText = "👀 浏览模式";
+                    status.style.color = "#00ff88";
+                    status.style.borderColor = "#00ff88";
                 } else {
-                    // === 编辑模式 ===
-                    // 1. 显示红盒子 (实体!)
-                    this.proxyBox.visible = true; 
+                    this.orbit.enabled = false; // 🔒 锁死视角
+                    this.helper.visible = true; // 显示黄框
+                    crosshair.style.display = 'block';
                     
-                    // 2. 坐标轴附着在红盒子上 (而不是附着在虚无的点云上)
-                    this.gizmo.attach(this.proxyBox);
-                    this.gizmo.setMode(mode);
-                    
-                    // 3. 这里的 controls.enabled 不需要手动 false，
-                    // 因为我们上面绑定了 dragging-changed 事件。
-                    // 只要你点中了红盒子或坐标轴，相机就会停。
-                    
-                    label.innerText = `🔧 ${mode}模式：请拖动红色方框`;
-                    label.style.backgroundColor = "rgba(255,0,0,0.8)";
+                    const actionName = mode==='translate'?'平移':(mode==='rotate'?'旋转':'缩放');
+                    status.innerText = `🖐️ ${actionName}模式：在屏幕任意处滑动`;
+                    status.style.color = "#ffaa00";
+                    status.style.borderColor = "#ffaa00";
                 }
             }
 
             animate() {
                 requestAnimationFrame(() => this.animate());
-                this.controls.update();
+                this.orbit.update();
+                if(this.helper) this.helper.update();
                 this.viewer.update();
                 this.viewer.render();
             }
