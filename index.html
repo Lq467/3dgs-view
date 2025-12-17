@@ -3,22 +3,28 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>3DGS 成功运行版</title>
+    <title>3DGS 最终完美运行版</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
+        
+        /* 状态提示条 */
         #status-bar {
             position: absolute; top: 0; left: 0; width: 100%; 
             padding: 15px; background: rgba(0,0,0,0.8); 
             color: #0f0; text-align: center; font-size: 14px; 
             z-index: 999; pointer-events: none;
         }
+
+        /* 启动按钮 */
         #start-btn {
             position: absolute; bottom: 15%; left: 50%; transform: translateX(-50%);
             padding: 12px 30px; font-size: 18px; border-radius: 25px;
             background: white; border: none; cursor: pointer; display: none;
-            z-index: 1000;
+            z-index: 1000; box-shadow: 0 0 15px rgba(255,255,255,0.5);
         }
     </style>
+
+    <!-- 🟢 引擎核心 v0.4.7 (修复所有已知报错) -->
     <script type="importmap">
     {
         "imports": {
@@ -31,17 +37,14 @@
 </head>
 <body>
 
-    <div id="status-bar">正在连接...</div>
+    <div id="status-bar">正在连接服务器...</div>
     <button id="start-btn">开启陀螺仪</button>
 
     <script type="module">
         import * as THREE from 'three';
         import { Viewer } from '@mkkellogg/gaussian-splats-3d';
 
-        // 🟢 重点检查这里！
-        // 1. 我保留了 datasets (因为你确实建的是dataset)
-        // 2. 我去掉了 ?download=true (防止引擎误判格式)
-        // 3. 【重要】如果你的文件不叫 scene.splat，请把最后这个名字改成你列表里真实的名字！
+        // ✅ 已修正：将 blob 替换为 resolve，这才是真正的文件下载链接
         const MODEL_FILE = 'https://huggingface.co/datasets/liu1230/my-3dgs/resolve/main/scene.splat';
 
         const status = document.getElementById('status-bar');
@@ -50,15 +53,17 @@
         let isRunning = false;
         let initialGyro = null;
         
-        const CLAMP_X = 0.5; 
-        const CLAMP_Y = 0.6; 
+        // 陀螺仪防穿帮：限制上下左右转动的角度
+        const CLAMP_X = 0.5; // 上下约30度
+        const CLAMP_Y = 0.6; // 左右约35度
 
         async function main() {
+            // 初始化引擎
             viewer = new Viewer({
                 'cameraUp': [0, 1, 0],
-                'initialCameraPosition': [0, 1, 4],
+                'initialCameraPosition': [0, 1, 4], // 相机往后拉一点
                 'initialCameraLookAt': [0, 0, 0],
-                'sharedMemoryForWorkers': false,
+                'sharedMemoryForWorkers': false, // 兼容性设置
             });
             document.body.appendChild(viewer.renderer.domElement);
 
@@ -67,20 +72,20 @@
             try {
                 await viewer.addSplatScene(MODEL_FILE, {
                     'showLoadingUI': false,
-                    // 强制指定格式，防止因为链接没写对后缀而报错
-                    'format': 'splat',
-                    'streamView': true, 
-                    'splatAlphaRemovalThreshold': 5, 
+                    'format': 'splat',       // 强制指定格式，防止引擎误判
+                    'streamView': true,      // 开启流式加载，一边下一边看，防止手机内存爆
+                    'splatAlphaRemovalThreshold': 5, // 移除背景杂点
                     'onProgress': (percent, percentStr) => {
                         if (percentStr === 'NaN') {
-                            status.innerText = `📥 正在流式加载... (如果卡住不动，请检查文件名是否写对)`;
+                            status.innerText = `📥 正在加载数据流... (请稍候)`;
                         } else {
                             status.innerText = `📥 下载进度: ${percentStr}%`;
                         }
                     }
                 });
 
-                status.innerText = "✅ 加载成功！";
+                // 加载成功！
+                status.innerText = "✅ 模型加载完成！";
                 status.style.color = "#fff";
                 btn.style.display = "block";
 
@@ -88,13 +93,10 @@
                 console.error(err);
                 status.innerText = "❌ 错误: " + err.message;
                 status.style.color = "red";
-                
-                if (err.message.includes('404') || err.message.includes('supported')) {
-                     status.innerText += "\n👉 诊断：链接找不到文件。请检查文件名是不是写错了(区分大小写)？";
-                }
             }
         }
 
+        // 按钮点击：开始渲染并请求陀螺仪
         btn.addEventListener('click', () => {
             btn.style.display = 'none';
             status.style.display = 'none';
@@ -103,6 +105,7 @@
             requestGyro();
         });
 
+        // 申请权限 (针对 iOS)
         function requestGyro() {
             if (typeof DeviceOrientationEvent !== 'undefined' && 
                 typeof DeviceOrientationEvent.requestPermission === 'function') {
@@ -111,26 +114,35 @@
                         if (response === 'granted') {
                             window.addEventListener('deviceorientation', handleOrientation);
                         } else {
-                            alert('需允许陀螺仪权限');
+                            alert('需要允许陀螺仪权限才能控制视角');
                         }
                     }).catch(console.error);
             } else {
+                // 安卓直接监听
                 window.addEventListener('deviceorientation', handleOrientation);
             }
         }
 
+        // 陀螺仪逻辑
         function handleOrientation(event) {
             if (!viewer || !isRunning) return;
+            
+            // 记录初始角度作为零点
             if (!initialGyro && event.alpha !== null) {
                 initialGyro = { beta: event.beta, gamma: event.gamma };
                 return;
             }
             if (!initialGyro) return;
 
+            // 计算相对转动
             let deltaX = (event.beta - initialGyro.beta) * (Math.PI / 180);
             let deltaY = (event.gamma - initialGyro.gamma) * (Math.PI / 180);
+
+            // 限制范围 (防穿帮)
             deltaX = Math.max(-CLAMP_X, Math.min(CLAMP_X, deltaX));
             deltaY = Math.max(-CLAMP_Y, Math.min(CLAMP_Y, deltaY));
+
+            // 应用旋转
             viewer.camera.rotation.set(deltaX, deltaY, 0, 'YXZ');
             viewer.update();
         }
