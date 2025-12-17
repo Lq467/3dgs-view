@@ -3,63 +3,52 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>3DGS SuperSplat 交互版</title>
+    <title>3DGS SuperSplat 风格编辑器</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #111; font-family: sans-serif; }
+        body { margin: 0; overflow: hidden; background-color: #1a1a1a; font-family: sans-serif; }
         
-        /* 顶部提示 */
-        #status-bar {
-            position: absolute; top: 0; left: 0; width: 100%; 
-            padding: 10px; background: rgba(0,0,0,0.8); 
-            color: #0f0; text-align: center; font-size: 14px; 
-            z-index: 999; pointer-events: none;
+        /* 顶部加载提示 */
+        #loader-bar {
+            position: absolute; top: 0; left: 0; width: 0%; height: 4px; 
+            background: #00ff88; z-index: 2000; transition: width 0.2s;
+        }
+        #status-text {
+            position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+            color: #fff; background: rgba(0,0,0,0.7); padding: 5px 15px;
+            border-radius: 20px; font-size: 13px; pointer-events: none; z-index: 2000;
         }
 
-        /* 底部控制面板 (仿 SuperSplat) */
-        #controls-panel {
-            position: absolute; bottom: 0; left: 0; width: 100%; height: 40%;
-            background: rgba(30,30,30,0.95); 
-            border-top: 1px solid #555;
-            display: flex; flex-direction: column;
-            z-index: 1000; transition: transform 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
+        /* 底部工具栏 - 仿 SuperSplat 风格 */
+        #toolbar {
+            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+            background: rgba(40, 40, 40, 0.9);
+            padding: 10px 20px; border-radius: 12px;
+            display: flex; gap: 15px;
+            border: 1px solid #555;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            z-index: 1000;
         }
 
-        /* 标题栏 (点击可折叠) */
-        .panel-header {
-            padding: 12px; background: #222; color: white; 
-            font-size: 14px; display: flex; justify-content: space-between; align-items: center;
-            cursor: pointer; user-select: none; border-bottom: 1px solid #444;
+        .tool-btn {
+            background: #333; border: 1px solid #666; color: #ccc;
+            width: 40px; height: 40px; border-radius: 8px;
+            cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center;
+            transition: all 0.2s;
         }
-        
-        .scroll-area {
-            flex: 1; overflow-y: auto; padding: 20px 15px;
-        }
+        .tool-btn:hover { background: #444; color: #fff; }
+        .tool-btn.active { background: #007bff; border-color: #0056b3; color: white; }
 
-        .control-group { margin-bottom: 20px; }
-        .control-title { color: #888; font-size: 12px; margin-bottom: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
-        
-        /* 滑杆行样式 */
-        .slider-row {
-            display: flex; align-items: center; margin-bottom: 12px;
-        }
-        .slider-label { color: #ddd; width: 25px; font-size: 14px; font-weight: bold; }
-        input[type=range] { 
-            flex: 1; margin: 0 15px; cursor: pointer; height: 4px; border-radius: 2px;
-            accent-color: #0f0; /* 安卓滑块颜色 */
-        }
-        .slider-val { color: #0f0; width: 45px; font-size: 12px; text-align: right; font-family: monospace; }
-
-        /* 重置按钮 */
-        #reset-cam {
+        /* 右上角重置按钮 */
+        #reset-view {
             position: absolute; top: 20px; right: 20px;
-            background: rgba(255,255,255,0.9); border: none; padding: 8px 16px;
-            border-radius: 20px; cursor: pointer; z-index: 900;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3); font-weight: bold; font-size: 14px;
+            background: #333; color: white; border: 1px solid #555;
+            padding: 8px 15px; border-radius: 8px; cursor: pointer;
+            z-index: 1000;
         }
-        #reset-cam:active { transform: scale(0.95); }
+        #reset-view:hover { background: #444; }
+
     </style>
-    
-    <!-- 引用 v0.4.7 引擎 -->
+
     <script type="importmap">
     {
         "imports": {
@@ -72,230 +61,187 @@
 </head>
 <body>
 
-    <div id="status-bar">准备加载...</div>
-    <button id="reset-cam">🔄 重置视角</button>
+    <div id="loader-bar"></div>
+    <div id="status-text">准备加载...</div>
 
-    <div id="controls-panel">
-        <div class="panel-header" id="toggle-panel">
-            <span>🎛️ 模型调校 (位置/旋转/缩放)</span>
-            <span id="arrow-icon">⬇️</span>
-        </div>
-        <div class="scroll-area">
-            
-            <!-- 缩放 -->
-            <div class="control-group">
-                <div class="control-title">缩放 (Scale)</div>
-                <div class="slider-row">
-                    <span class="slider-label">S</span>
-                    <input type="range" id="scale" min="0.1" max="10.0" step="0.1" value="1.0">
-                    <span class="slider-val" id="val-scale">1.0</span>
-                </div>
-            </div>
+    <button id="reset-view">🎥 重置视角</button>
 
-            <!-- 旋转 -->
-            <div class="control-group">
-                <div class="control-title">旋转 (Rotation)</div>
-                <div class="slider-row">
-                    <span class="slider-label" style="color:#ff5555">X</span>
-                    <input type="range" class="rot-slider" data-axis="x" min="-180" max="180" value="0">
-                    <span class="slider-val" id="val-rot-x">0°</span>
-                </div>
-                <div class="slider-row">
-                    <span class="slider-label" style="color:#55ff55">Y</span>
-                    <input type="range" class="rot-slider" data-axis="y" min="-180" max="180" value="0">
-                    <span class="slider-val" id="val-rot-y">0°</span>
-                </div>
-                <div class="slider-row">
-                    <span class="slider-label" style="color:#5555ff">Z</span>
-                    <input type="range" class="rot-slider" data-axis="z" min="-180" max="180" value="0">
-                    <span class="slider-val" id="val-rot-z">0°</span>
-                </div>
-            </div>
-
-            <!-- 位移 -->
-            <div class="control-group">
-                <div class="control-title">位移 (Position)</div>
-                <div class="slider-row">
-                    <span class="slider-label">X</span>
-                    <input type="range" class="pos-slider" data-axis="x" min="-10" max="10" step="0.1" value="0">
-                    <span class="slider-val" id="val-pos-x">0</span>
-                </div>
-                <div class="slider-row">
-                    <span class="slider-label">Y</span>
-                    <input type="range" class="pos-slider" data-axis="y" min="-10" max="10" step="0.1" value="0">
-                    <span class="slider-val" id="val-pos-y">0</span>
-                </div>
-                <div class="slider-row">
-                    <span class="slider-label">Z</span>
-                    <input type="range" class="pos-slider" data-axis="z" min="-10" max="10" step="0.1" value="0">
-                    <span class="slider-val" id="val-pos-z">0</span>
-                </div>
-            </div>
-        </div>
+    <div id="toolbar">
+        <button class="tool-btn active" id="btn-translate" title="移动 (Translate)">✢</button>
+        <button class="tool-btn" id="btn-rotate" title="旋转 (Rotate)">↻</button>
+        <button class="tool-btn" id="btn-scale" title="缩放 (Scale)">⤢</button>
+        <div style="width:1px; background:#555; margin:0 5px;"></div>
+        <button class="tool-btn" id="btn-reset-model" title="重置模型状态">↺</button>
     </div>
 
     <script type="module">
         import * as THREE from 'three';
+        import { TransformControls } from 'three/addons/controls/TransformControls.js';
         import { Viewer } from '@mkkellogg/gaussian-splats-3d';
 
-        // 你的 HF 直链
+        // 模型地址
         const MODEL_URL = 'https://huggingface.co/datasets/liu1230/my-3dgs/resolve/main/scene.splat';
 
-        const status = document.getElementById('status-bar');
-        const resetBtn = document.getElementById('reset-cam');
-        let viewer;
-        let splatMesh = null; // 真正的模型对象
+        // UI 元素
+        const statusBar = document.getElementById('loader-bar');
+        const statusText = document.getElementById('status-text');
+        
+        let viewer, transformControl, splatMesh;
 
-        // 变换参数缓存
-        let params = {
-            scale: 1.0,
-            rot: { x: 0, y: 0, z: 0 },
-            pos: { x: 0, y: 0, z: 0 }
-        };
-
-        async function main() {
+        async function init() {
+            // 1. 初始化 Viewer
             viewer = new Viewer({
                 'cameraUp': [0, 1, 0],
-                // 默认相机位置：往后拉 (Z=5)
-                'initialCameraPosition': [0, 1, 5], 
+                'initialCameraPosition': [0, 2, 5],
                 'initialCameraLookAt': [0, 0, 0],
-                // 🟢 开启内置控制器 (SuperSplat 核心交互)
-                'useBuiltInControls': true, 
-                'sharedMemoryForWorkers': false,
+                'useBuiltInControls': true, // 使用内置的 OrbitControls
+                'sharedMemoryForWorkers': false
             });
             document.body.appendChild(viewer.renderer.domElement);
 
+            // 2. 添加环境辅助（网格）
+            const gridHelper = new THREE.GridHelper(20, 20, 0x444444, 0x222222);
+            viewer.threeScene.add(gridHelper);
+
+            // 3. 初始化变换控制器 (Gizmo)
+            setupTransformControls();
+
+            // 4. 下载并加载模型
             try {
-                // 1. 下载数据
-                status.innerText = "🚀 正在下载...";
-                const response = await fetch(MODEL_URL);
-                if (!response.ok) throw new Error("下载失败: " + response.status);
-
-                const reader = response.body.getReader();
-                const contentLength = +response.headers.get('Content-Length');
-                let receivedLength = 0; 
-                let chunks = []; 
-
-                while(true) {
-                    const {done, value} = await reader.read();
-                    if (done) break;
-                    chunks.push(value);
-                    receivedLength += value.length;
-                    
-                    let progress = contentLength ? Math.round((receivedLength / contentLength) * 100) + "%" : (receivedLength / 1024 / 1024).toFixed(1) + " MB";
-                    status.innerText = `📥 下载中... ${progress}`;
-                }
-
-                status.innerText = "⚙️ 解析模型...";
-                const blob = new Blob(chunks);
-                const originalUrl = URL.createObjectURL(blob);
-                const fakeUrl = originalUrl + '#.splat';
-
-                // 2. 加载场景 (不接返回值)
-                await viewer.addSplatScene(fakeUrl, {
-                    'showLoadingUI': false,
-                    'splatAlphaRemovalThreshold': 2, 
-                });
-
-                // 3. 🟢 修正后的查找逻辑
-                // 优先尝试从 viewer.getSplatScene(0) 获取
-                splatMesh = viewer.getSplatScene(0);
-
-                // 如果上面没拿到，或者想确保万无一失，去 threeScene 里遍历
-                if (!splatMesh && viewer.threeScene) {
-                    viewer.threeScene.traverse((child) => {
-                        if (child.isMesh || (child.constructor && child.constructor.name.includes('Splat'))) {
-                            splatMesh = child;
-                        }
-                    });
-                }
-
-                if (splatMesh) {
-                    console.log("✅ 成功获取模型对象:", splatMesh);
-                    status.innerText = "✅ 加载成功！";
-                    setTimeout(() => { status.style.display = 'none'; }, 2000);
-                    viewer.start();
-                } else {
-                    throw new Error("模型已加载但未找到对象，无法控制");
-                }
-
+                const splatBuffer = await downloadWithProgress(MODEL_URL);
+                await loadSplatFromBuffer(splatBuffer);
             } catch (err) {
-                console.error(err);
-                status.innerText = "❌ 错误: " + err.message;
-                status.style.color = "red";
+                statusText.innerText = "❌ 错误: " + err.message;
+                statusBar.style.backgroundColor = 'red';
             }
         }
 
-        // ================= 变换逻辑 =================
-        
-        function updateTransform() {
-            if (!splatMesh) return;
-            splatMesh.scale.set(params.scale, params.scale, params.scale);
-            splatMesh.rotation.set(
-                THREE.MathUtils.degToRad(params.rot.x),
-                THREE.MathUtils.degToRad(params.rot.y),
-                THREE.MathUtils.degToRad(params.rot.z)
-            );
-            splatMesh.position.set(params.pos.x, params.pos.y, params.pos.z);
+        // --- 核心功能：设置变换控制器 ---
+        function setupTransformControls() {
+            // TransformControls 需要相机和渲染器DOM
+            transformControl = new TransformControls(viewer.camera, viewer.renderer.domElement);
+            
+            // 当用户拖拽 Gizmo 时，必须监听 'dragging-changed'
+            // 如果正在拖拽 Gizmo，就禁用 viewer 的相机控制器，否则画面会乱转
+            transformControl.addEventListener('dragging-changed', function (event) {
+                if (viewer.controls) {
+                    viewer.controls.enabled = !event.value;
+                }
+            });
+
+            viewer.threeScene.add(transformControl);
         }
 
-        // 绑定所有滑杆
-        document.getElementById('scale').addEventListener('input', (e) => {
-            params.scale = parseFloat(e.target.value);
-            document.getElementById('val-scale').innerText = params.scale;
-            updateTransform();
-        });
+        // --- 核心功能：处理下载进度 ---
+        async function downloadWithProgress(url) {
+            statusText.innerText = "正在连接...";
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
 
-        document.querySelectorAll('.rot-slider').forEach(el => {
-            el.addEventListener('input', (e) => {
-                const axis = e.target.dataset.axis;
-                const val = parseFloat(e.target.value);
-                params.rot[axis] = val;
-                document.getElementById(`val-rot-${axis}`).innerText = val + "°";
-                updateTransform();
+            const contentLength = +response.headers.get('Content-Length');
+            const reader = response.body.getReader();
+            let receivedLength = 0; 
+            let chunks = []; 
+
+            while(true) {
+                const {done, value} = await reader.read();
+                if (done) break;
+                chunks.push(value);
+                receivedLength += value.length;
+                
+                if (contentLength) {
+                    const percent = (receivedLength / contentLength) * 100;
+                    statusBar.style.width = percent + "%";
+                    statusText.innerText = `下载中... ${Math.round(percent)}%`;
+                } else {
+                    statusText.innerText = `下载中... ${(receivedLength/1024/1024).toFixed(1)}MB`;
+                }
+            }
+
+            return new Blob(chunks);
+        }
+
+        // --- 核心功能：加载并绑定 ---
+        async function loadSplatFromBuffer(blob) {
+            statusText.innerText = "解析模型...";
+            const url = URL.createObjectURL(blob) + '#.splat';
+
+            await viewer.addSplatScene(url, {
+                'splatAlphaRemovalThreshold': 5,
+                'showLoadingUI': false
+            });
+
+            // 获取模型对象
+            splatMesh = viewer.getSplatScene(0);
+
+            if (splatMesh) {
+                // 绑定 Gizmo 到模型上
+                transformControl.attach(splatMesh);
+                
+                statusText.innerText = "✅ 就绪";
+                setTimeout(() => { 
+                    statusText.style.display = 'none'; 
+                    statusBar.style.width = '0%';
+                }, 1000);
+                
+                viewer.start();
+            } else {
+                throw new Error("模型对象获取失败");
+            }
+        }
+
+        // --- 按钮事件绑定 ---
+        const modes = {
+            'btn-translate': 'translate',
+            'btn-rotate': 'rotate',
+            'btn-scale': 'scale'
+        };
+
+        Object.keys(modes).forEach(id => {
+            document.getElementById(id).addEventListener('click', (e) => {
+                // 切换模式
+                transformControl.setMode(modes[id]);
+                
+                // 更新按钮高亮
+                document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+                document.getElementById(id).classList.add('active');
             });
         });
 
-        document.querySelectorAll('.pos-slider').forEach(el => {
-            el.addEventListener('input', (e) => {
-                const axis = e.target.dataset.axis;
-                const val = parseFloat(e.target.value);
-                params.pos[axis] = val;
-                document.getElementById(`val-pos-${axis}`).innerText = val;
-                updateTransform();
-            });
+        // 重置模型位置
+        document.getElementById('btn-reset-model').addEventListener('click', () => {
+            if (splatMesh) {
+                splatMesh.position.set(0, 0, 0);
+                splatMesh.rotation.set(0, 0, 0);
+                splatMesh.scale.set(1, 1, 1);
+            }
         });
-
-        // ================= 其他功能 =================
 
         // 重置相机
-        resetBtn.addEventListener('click', () => {
-            viewer.camera.position.set(0, 1, 5);
+        document.getElementById('reset-view').addEventListener('click', () => {
+            viewer.camera.position.set(0, 2, 5);
             viewer.camera.lookAt(0, 0, 0);
-            if (viewer.controls) {
-                viewer.controls.target.set(0, 0, 0);
-                viewer.controls.update();
+            if(viewer.controls) viewer.controls.target.set(0,0,0);
+        });
+
+        // 监听键盘快捷键 (SuperSplat 习惯)
+        window.addEventListener('keydown', function (event) {
+            switch (event.key.toLowerCase()) {
+                case 't': // Translate
+                    document.getElementById('btn-translate').click();
+                    break;
+                case 'r': // Rotate
+                    document.getElementById('btn-rotate').click();
+                    break;
+                case 's': // Scale
+                    document.getElementById('btn-scale').click();
+                    break;
             }
         });
 
-        // 面板折叠
-        const panel = document.getElementById('controls-panel');
-        const header = document.getElementById('toggle-panel');
-        const arrow = document.getElementById('arrow-icon');
-        let isExpanded = true;
-        
-        header.addEventListener('click', () => {
-            isExpanded = !isExpanded;
-            if (isExpanded) {
-                panel.style.transform = "translateY(0)";
-                arrow.innerText = "⬇️";
-            } else {
-                panel.style.transform = "translateY(calc(100% - 45px))"; // 只留标题
-                arrow.innerText = "⬆️";
-            }
-        });
+        // 启动
+        init();
 
-        main();
     </script>
 </body>
 </html>
