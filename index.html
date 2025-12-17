@@ -3,90 +3,67 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3DGS Stable Fix</title>
+    <title>3DGS Arcball Ultimate</title>
     <style>
-        /* --- 核心样式：全屏、无滚动、黑色背景 --- */
         body, html {
             width: 100%; height: 100%; margin: 0; padding: 0;
-            overflow: hidden; background-color: #000;
-            touch-action: none; /* 禁止浏览器接管触摸 */
-            font-family: monospace;
-            user-select: none;
+            overflow: hidden; background-color: #080808;
+            touch-action: none; /* 关键：禁止浏览器处理触摸 */
+            user-select: none; font-family: sans-serif;
         }
 
-        /* --- 错误日志控制台 (关键调试工具) --- */
-        #console-log {
-            position: absolute; top: 0; left: 0; width: 100%; height: auto; max-height: 150px;
-            background: rgba(200, 0, 0, 0.6); color: white;
-            font-size: 11px; padding: 5px; pointer-events: none; z-index: 9999;
-            display: none; /* 平时隐藏，有错才显示 */
-            overflow-y: auto; text-align: left;
+        /* 顶部提示条 */
+        #top-status {
+            position: absolute; top: 10px; left: 0; width: 100%;
+            text-align: center; pointer-events: none; z-index: 1000;
+        }
+        .status-pill {
+            background: rgba(30,30,30,0.9); color: #00ff88;
+            padding: 8px 20px; border-radius: 30px; font-size: 13px; font-weight: bold;
+            display: inline-block; border: 1px solid #444;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
         }
 
-        /* --- 加载界面 --- */
-        #loader {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: #111; display: flex; flex-direction: column;
-            align-items: center; justify-content: center; z-index: 5000;
-            transition: opacity 0.5s;
-        }
-        .loading-bar { width: 200px; height: 4px; background: #333; margin-top: 20px; border-radius: 2px; }
-        .loading-progress { width: 0%; height: 100%; background: #00ff88; transition: width 0.1s; }
-        .loading-text { color: #888; margin-top: 10px; font-size: 12px; }
-
-        /* --- 顶部功能区 --- */
-        #header-bar {
-            position: absolute; top: 15px; left: 15px; right: 15px;
-            display: flex; justify-content: space-between; align-items: flex-start;
-            pointer-events: none; z-index: 1000;
-        }
-        
-        /* 锁定视角按钮 */
-        #lock-toggle {
-            pointer-events: auto;
-            background: rgba(50, 50, 50, 0.8); border: 1px solid #666; color: #ddd;
-            padding: 8px 15px; border-radius: 20px; font-size: 13px; font-weight: bold;
-            display: flex; align-items: center; gap: 5px; opacity: 0; transition: all 0.3s;
-        }
-        #lock-toggle.visible { opacity: 1; }
-        #lock-toggle.active { background: #ffaa00; color: #000; border-color: #ffaa00; box-shadow: 0 0 15px rgba(255,170,0,0.5); }
-
-        /* 重置按钮 */
-        #reset-btn {
-            pointer-events: auto;
-            background: rgba(50, 50, 50, 0.8); color: white; border: 1px solid #555;
-            padding: 8px 12px; border-radius: 20px; cursor: pointer;
-        }
-
-        /* --- 底部工具栏 --- */
+        /* 底部操作栏 */
         #dock {
             position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
-            background: rgba(20,20,20,0.9); padding: 8px; border-radius: 24px;
-            display: flex; gap: 10px; border: 1px solid #444; z-index: 1000;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            background: rgba(20,20,20,0.95); padding: 8px; border-radius: 24px;
+            display: flex; gap: 8px; border: 1px solid #444; z-index: 1000;
         }
 
-        .dock-btn {
-            width: 50px; height: 50px; background: transparent; border: none;
-            color: #888; font-size: 20px; border-radius: 16px;
+        .btn {
+            width: 55px; height: 55px; background: transparent; border: none;
+            color: #777; font-size: 24px; border-radius: 18px;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
-            transition: all 0.2s; position: relative;
+            transition: all 0.2s;
         }
-        .dock-btn span { font-size: 10px; margin-top: 3px; }
+        .btn span { font-size: 10px; margin-top: 2px; font-weight: normal; }
         
-        .dock-btn.active { background: #333; color: white; transform: translateY(-3px); }
-        .dock-btn.active.view { color: #00ff88; box-shadow: 0 5px 15px rgba(0,255,136,0.2); }
-        .dock-btn.active.edit { color: #00aaff; box-shadow: 0 5px 15px rgba(0,170,255,0.2); }
-        
-        .divider { width: 1px; height: 30px; background: #444; margin: 10px 0; }
+        /* 激活状态 */
+        .btn.active { background: #333; color: white; transform: translateY(-4px); }
+        .btn.active.view-mode { color: #00ff88; box-shadow: 0 5px 15px rgba(0,255,136,0.15); }
+        .btn.active.edit-mode { color: #00aaff; box-shadow: 0 5px 15px rgba(0,170,255,0.15); }
 
-        /* 状态提示吐司 */
-        #toast {
-            position: absolute; top: 70px; left: 50%; transform: translateX(-50%);
-            background: rgba(0,0,0,0.8); color: white; padding: 6px 15px;
-            border-radius: 20px; font-size: 12px; opacity: 0; transition: opacity 0.3s;
-            pointer-events: none; z-index: 2000; border: 1px solid #333;
+        .divider { width: 1px; height: 35px; background: #444; margin: 10px 4px; }
+
+        /* 重置按钮 */
+        #reset-cam {
+            position: absolute; top: 20px; right: 20px;
+            background: rgba(0,0,0,0.6); color: white; border: 1px solid #555;
+            width: 40px; height: 40px; border-radius: 50%; cursor: pointer;
+            z-index: 1000; display: flex; align-items: center; justify-content: center;
+            font-size: 18px;
         }
+
+        /* 加载动画 */
+        #loader {
+            position: absolute; top:0; left:0; width:100%; height:100%;
+            background:#000; z-index:5000; display:flex; flex-direction:column;
+            align-items:center; justify-content:center; transition: opacity 0.5s;
+        }
+        .spinner { width:40px; height:40px; border:4px solid #333; border-top-color:#00ff88; border-radius:50%; animation:spin 1s linear infinite; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        .log { color: #666; font-size: 12px; margin-top: 10px; font-family: monospace; }
     </style>
 
     <script type="importmap">
@@ -101,56 +78,41 @@
 </head>
 <body>
 
-    <!-- 错误日志 (自动显示) -->
-    <div id="console-log"></div>
-
-    <!-- 加载层 -->
     <div id="loader">
-        <div style="color:white; font-weight:bold;">✨ 系统初始化...</div>
-        <div class="loading-bar"><div class="loading-progress" id="progress"></div></div>
-        <div class="loading-text" id="progress-text">0%</div>
+        <div class="spinner"></div>
+        <div class="log" id="load-log">初始化引擎...</div>
     </div>
 
-    <!-- 状态提示 -->
-    <div id="toast">提示信息</div>
-
-    <!-- 顶部 -->
-    <div id="header-bar">
-        <button id="reset-btn">🔄 重置</button>
-        <button id="lock-toggle">🔓 锁定视角</button>
+    <div id="top-status">
+        <div class="status-pill" id="status-text">👀 浏览模式：任意旋转</div>
     </div>
 
-    <!-- 底部 Dock -->
+    <button id="reset-cam" title="重置视角">↺</button>
+
     <div id="dock">
-        <button class="dock-btn active view" id="btn-view" onclick="app.setMode('view')">
+        <button class="btn active view-mode" onclick="app.setMode('view')" id="btn-view">
             👁️<span>浏览</span>
         </button>
+        
         <div class="divider"></div>
-        <button class="dock-btn" id="btn-translate" onclick="app.setMode('translate')">
+
+        <button class="btn" onclick="app.setMode('translate')" id="btn-translate">
             ✢<span>移动</span>
         </button>
-        <button class="dock-btn" id="btn-rotate" onclick="app.setMode('rotate')">
+        <button class="btn" onclick="app.setMode('rotate')" id="btn-rotate">
             ↻<span>旋转</span>
         </button>
-        <button class="dock-btn" id="btn-scale" onclick="app.setMode('scale')">
+        <button class="btn" onclick="app.setMode('scale')" id="btn-scale">
             ⤢<span>缩放</span>
         </button>
     </div>
 
     <script type="module">
         import * as THREE from 'three';
-        // 回归稳定的 OrbitControls，这是最保险的
-        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        // 🌟 核心改变1：使用 ArcballControls 实现真360度旋转
+        import { ArcballControls } from 'three/addons/controls/ArcballControls.js';
         import { TransformControls } from 'three/addons/controls/TransformControls.js';
         import { Viewer } from '@mkkellogg/gaussian-splats-3d';
-
-        // --- 全局错误捕获 ---
-        window.onerror = function(msg, url, line) {
-            const log = document.getElementById('console-log');
-            log.style.display = 'block';
-            log.innerHTML += `❌ ERROR: ${msg} (Line ${line})<br>`;
-            document.getElementById('loader').style.display = 'none'; // 发生错误隐藏加载条，防止遮挡
-        };
 
         const MODEL_URL = 'https://huggingface.co/datasets/liu1230/my-3dgs/resolve/main/scene.splat';
 
@@ -160,193 +122,143 @@
                 this.controls = null;
                 this.gizmo = null;
                 this.splatMesh = null;
-                this.isLocked = false; // 视角锁定状态
-                this.currentMode = 'view';
             }
 
             async init() {
                 try {
-                    // 1. 初始化 Viewer (⚠️ 必须禁用内置控制)
+                    const log = (msg) => document.getElementById('load-log').innerText = msg;
+
+                    // 1. 初始化 Viewer (禁用自带控制，禁用自驱动)
                     this.viewer = new Viewer({
                         'cameraUp': [0, 1, 0],
-                        'initialCameraPosition': [0, 1, 4],
+                        'initialCameraPosition': [0, 0, 5],
                         'initialCameraLookAt': [0, 0, 0],
                         'useBuiltInControls': false, 
-                        'selfDrivenMode': false, // 手动驱动
+                        'selfDrivenMode': false,
                         'sharedMemoryForWorkers': false
                     });
                     
-                    document.body.appendChild(this.viewer.renderer.domElement);
+                    const canvas = this.viewer.renderer.domElement;
+                    document.body.appendChild(canvas);
 
-                    // 2. 初始化 OrbitControls (绑定到 body)
-                    this.controls = new OrbitControls(this.viewer.camera, document.body);
-                    this.controls.enableDamping = true; // 开启阻尼(惯性)
-                    this.controls.dampingFactor = 0.05;
-                    this.controls.screenSpacePanning = true;
-                    // 放开限制，虽然不能翻跟头，但能看天看地
-                    this.controls.minDistance = 0.1;
-                    this.controls.maxDistance = 100;
-                    this.controls.minPolarAngle = 0; // 允许看到正上方
-                    this.controls.maxPolarAngle = Math.PI; // 允许看到正下方
+                    // 2. 🌟 初始化 ArcballControls (360度无死角)
+                    // 注意：Arcball 需要 scene 参数来绘制Gizmo(虽然我们会隐藏它)
+                    this.controls = new ArcballControls(this.viewer.camera, canvas, this.viewer.threeScene);
+                    this.controls.enableAnimations = true; // 惯性
+                    this.controls.dampingFactor = 10;
+                    this.controls.wMax = 20; // 允许快速翻滚
+                    this.controls.setGizmosVisible(false); // 隐藏Arcball自带的圆圈UI
 
-                    // 3. 初始化 Gizmo (编辑轴)
-                    this.gizmo = new TransformControls(this.viewer.camera, this.viewer.renderer.domElement);
-                    this.gizmo.setSize(1.2); 
-                    // 🔥 让坐标轴永远显示在最前面 (不被模型遮挡)
+                    // 3. 初始化 TransformControls (编辑轴)
+                    this.gizmo = new TransformControls(this.viewer.camera, canvas);
+                    this.gizmo.setSize(1.5); // 放大坐标轴，方便手机点击
+                    this.gizmo.setSpace('local');
+                    
+                    // 🔥 让坐标轴永远在最上层 (防止被模型挡住点不到)
                     this.gizmo.traverse(child => {
                         if(child.material) {
                             child.material.depthTest = false;
                             child.material.depthWrite = false;
-                        }
-                    });
-
-                    // 拖拽 Gizmo 时自动处理事件
-                    this.gizmo.addEventListener('dragging-changed', (event) => {
-                        if (!this.isLocked) {
-                            // 只有在未锁定的情况下，才自动开关视角
-                            this.controls.enabled = !event.value;
+                            child.renderOrder = 9999;
                         }
                     });
                     this.viewer.threeScene.add(this.gizmo);
 
-                    // 4. 网格
-                    const grid = new THREE.GridHelper(20, 20, 0x444444, 0x111111);
-                    grid.position.y = -1;
-                    this.viewer.threeScene.add(grid);
+                    // 4. 加载模型
+                    log("下载模型数据...");
+                    const response = await fetch(MODEL_URL);
+                    const reader = response.body.getReader();
+                    const len = +response.headers.get('Content-Length');
+                    let received = 0;
+                    let chunks = [];
+
+                    while(true) {
+                        const {done, value} = await reader.read();
+                        if (done) break;
+                        chunks.push(value);
+                        received += value.length;
+                        if(len) log(`下载中 ${Math.round((received/len)*100)}%`);
+                    }
+
+                    const blob = new Blob(chunks);
+                    const url = URL.createObjectURL(blob) + '#.splat';
+                    
+                    log("渲染模型...");
+                    await this.viewer.addSplatScene(url, { 'showLoadingUI': false, 'splatAlphaRemovalThreshold': 5 });
+                    this.splatMesh = this.viewer.getSplatScene(0);
+
+                    // 隐藏Loading
+                    document.getElementById('loader').style.opacity = 0;
+                    setTimeout(() => document.getElementById('loader').style.display = 'none', 500);
 
                     // 5. 启动循环
                     this.animate();
 
-                    // 6. 下载并加载
-                    await this.loadModel();
+                    // 默认进入浏览模式
+                    this.setMode('view');
 
                 } catch (e) {
-                    throw new Error("Init Failed: " + e.message);
-                }
-            }
-
-            async loadModel() {
-                const pBar = document.getElementById('progress');
-                const pText = document.getElementById('progress-text');
-                
-                const response = await fetch(MODEL_URL);
-                const len = +response.headers.get('Content-Length');
-                const reader = response.body.getReader();
-                let received = 0;
-                let chunks = [];
-
-                while(true) {
-                    const {done, value} = await reader.read();
-                    if(done) break;
-                    chunks.push(value);
-                    received += value.length;
-                    if(len) {
-                        const pct = (received/len)*100;
-                        pBar.style.width = pct + "%";
-                        pText.innerText = `下载中 ${Math.round(pct)}%`;
-                    }
-                }
-
-                pText.innerText = "解析模型...";
-                const blob = new Blob(chunks);
-                const url = URL.createObjectURL(blob) + '#.splat';
-
-                await this.viewer.addSplatScene(url, { 'showLoadingUI': false, 'splatAlphaRemovalThreshold': 5 });
-                
-                this.splatMesh = this.viewer.getSplatScene(0);
-
-                // 隐藏加载
-                document.getElementById('loader').style.opacity = 0;
-                setTimeout(()=>document.getElementById('loader').style.display='none', 500);
-                
-                if(this.splatMesh) {
-                    this.showToast("✅ 加载成功");
-                    this.setMode('view');
+                    alert("错误: " + e.message);
                 }
             }
 
             setMode(mode) {
-                this.currentMode = mode;
-                
-                // UI 更新
-                document.querySelectorAll('.dock-btn').forEach(b => b.classList.remove('active', 'view', 'edit'));
-                const activeBtn = document.getElementById(mode === 'view' ? 'btn-view' : 'btn-' + mode);
-                activeBtn.classList.add('active', mode === 'view' ? 'view' : 'edit');
+                // UI 切换
+                document.querySelectorAll('.btn').forEach(b => b.classList.remove('active', 'view-mode', 'edit-mode'));
+                const btn = document.getElementById(mode === 'view' ? 'btn-view' : 'btn-' + mode);
+                btn.classList.add('active', mode === 'view' ? 'view-mode' : 'edit-mode');
 
-                const lockBtn = document.getElementById('lock-toggle');
+                const status = document.getElementById('status-text');
 
                 if (mode === 'view') {
-                    // 浏览模式
-                    this.gizmo.detach();
-                    this.unlockCamera(); // 强制解锁
-                    lockBtn.classList.remove('visible'); // 隐藏锁定按钮
-                    this.showToast("👁️ 浏览模式");
+                    // === 浏览模式 ===
+                    this.gizmo.detach(); // 移除坐标轴
+                    
+                    // ✅ 启用相机 (360旋转)
+                    this.controls.enabled = true;
+                    
+                    status.innerText = "👀 浏览模式：双指缩放，任意旋转";
+                    status.style.color = "#00ff88";
                 } else {
-                    // 编辑模式
+                    // === 编辑模式 ===
                     if (this.splatMesh) {
                         this.gizmo.attach(this.splatMesh);
                         this.gizmo.setMode(mode);
                     }
-                    lockBtn.classList.add('visible'); // 显示锁定按钮
-                    this.showToast(`🔧 ${mode}模式`);
+                    
+                    // ⛔️ 强制禁用相机！
+                    // 这是解决“操作无反应”的关键。
+                    // 进入编辑模式后，屏幕除了坐标轴，其他地方怎么摸都不会动。
+                    // 这样确保你的触摸 100% 传给坐标轴，而不是被相机吃掉。
+                    this.controls.enabled = false;
+
+                    status.innerText = `🔧 ${mode === 'translate'?'移动':(mode==='rotate'?'旋转':'缩放')}模式：相机已锁，请拖动轴线`;
+                    status.style.color = "#00aaff";
                 }
-            }
-
-            toggleLock() {
-                if (this.isLocked) this.unlockCamera();
-                else this.lockCamera();
-            }
-
-            lockCamera() {
-                this.isLocked = true;
-                this.controls.enabled = false;
-                const btn = document.getElementById('lock-toggle');
-                btn.classList.add('active');
-                btn.innerHTML = "🔒 视角已锁";
-                this.showToast("🔒 视角锁定：只能编辑模型");
-            }
-
-            unlockCamera() {
-                this.isLocked = false;
-                this.controls.enabled = true;
-                const btn = document.getElementById('lock-toggle');
-                btn.classList.remove('active');
-                btn.innerHTML = "🔓 锁定视角";
-                if(this.currentMode !== 'view') this.showToast("🔓 视角解锁");
             }
 
             resetView() {
                 this.controls.reset();
-                this.viewer.camera.position.set(0, 1, 4);
-                this.viewer.camera.lookAt(0,0,0);
-                this.showToast("📷 视角重置");
-            }
-
-            showToast(msg) {
-                const t = document.getElementById('toast');
-                t.innerText = msg;
-                t.style.opacity = 1;
-                clearTimeout(this.toastTimer);
-                this.toastTimer = setTimeout(()=>t.style.opacity=0, 2500);
+                // Arcball重置有时候方向不对，手动矫正
+                this.viewer.camera.position.set(0, 0, 5);
+                this.viewer.camera.lookAt(0, 0, 0);
+                this.viewer.camera.up.set(0, 1, 0);
             }
 
             animate() {
                 requestAnimationFrame(() => this.animate());
-                if(this.controls) this.controls.update();
-                if(this.viewer) {
-                    this.viewer.update();
-                    this.viewer.render();
-                }
+                
+                // 每一帧都必须更新
+                this.controls.update();
+                this.viewer.update();
+                this.viewer.render();
             }
         }
 
-        // 启动
         window.app = new App();
         window.app.init();
 
-        // 绑定HTML按钮事件
-        document.getElementById('reset-btn').addEventListener('click', () => window.app.resetView());
-        document.getElementById('lock-toggle').addEventListener('click', () => window.app.toggleLock());
+        document.getElementById('reset-cam').addEventListener('click', () => window.app.resetView());
 
     </script>
 </body>
