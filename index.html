@@ -85,15 +85,18 @@
 
                 status.innerText = "⚙️ 正在处理数据...";
                 
-                // 2. 核心修改：将数据封装成一个【真】文件对象
+                // 2. 核心修改：生成 Blob URL 并加上【欺骗后缀】
                 const blob = new Blob(chunks);
-                // 👇 这一步是骗过引擎的关键！我们造了一个假文件，名字叫 model.splat
-                const file = new File([blob], "model.splat");
+                const originalUrl = URL.createObjectURL(blob);
+                
+                // 👇【关键一步】在链接后面强行加上 #.splat
+                // 引擎看到 .splat 才会开心，而浏览器下载时会忽略 # 后面的内容
+                const fakeUrl = originalUrl + '#.splat';
 
                 status.innerText = "🎬 引擎加载中...";
 
-                // 3. 把文件喂给引擎 (引擎支持直接读取 File 对象)
-                await viewer.addSplatScene(file, {
+                // 3. 把这个“带假发”的链接传进去
+                await viewer.addSplatScene(fakeUrl, {
                     'showLoadingUI': false,
                     'splatAlphaRemovalThreshold': 5, 
                     'scale': [1, 1, 1],
@@ -103,6 +106,9 @@
                 status.innerText = "✅ 加载成功！";
                 status.style.color = "#fff";
                 btn.style.display = "block";
+                
+                // 清理内存（注意：这里不能马上 revoke，因为引擎还在读，稍微延迟一点）
+                setTimeout(() => URL.revokeObjectURL(originalUrl), 10000);
 
             } catch (err) {
                 console.error(err);
