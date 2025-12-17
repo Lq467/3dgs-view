@@ -3,90 +3,60 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3DGS 移动端专业版</title>
+    <title>3DGS SuperSplat Core</title>
     <style>
-        /* 全局禁止默认触控，交给3D引擎 */
-        body { 
-            margin: 0; overflow: hidden; background-color: #111; 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            touch-action: none; 
-            user-select: none;
-            -webkit-user-select: none;
-        }
-
-        /* 顶部状态提示 */
-        #status-pill {
-            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.8); color: #0f0;
-            padding: 8px 20px; border-radius: 30px; font-size: 14px; font-weight: bold;
-            pointer-events: none; z-index: 2000; display: flex; align-items: center; gap: 8px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-            border: 1px solid #333;
-        }
-
-        /* 模式指示器 (屏幕中央下方) */
-        #mode-indicator {
-            position: absolute; bottom: 120px; left: 0; width: 100%;
-            text-align: center; pointer-events: none; z-index: 900;
-            opacity: 0; transition: opacity 0.3s;
-        }
-        .mode-tag {
-            background: rgba(0, 123, 255, 0.8); color: white;
-            padding: 6px 12px; border-radius: 4px; font-size: 12px;
-            display: inline-block; text-shadow: 0 1px 2px rgba(0,0,0,0.5);
-        }
-
-        /* 底部主控栏 */
-        #dock {
-            position: absolute; bottom: 20px; left: 20px; right: 20px;
-            height: 70px;
-            background: rgba(30, 30, 30, 0.95);
-            border-radius: 20px;
-            display: flex; justify-content: space-around; align-items: center;
-            border: 1px solid #444;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.8);
-            z-index: 1000;
-            padding: 0 10px;
-        }
-
-        /* 大按钮样式 */
-        .dock-btn {
-            width: 55px; height: 55px;
-            border-radius: 12px; border: none;
-            background: transparent; color: #888;
-            font-size: 24px; display: flex; flex-direction: column;
-            align-items: center; justify-content: center;
-            cursor: pointer; position: relative;
-            transition: all 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        }
+        /* 强制全屏无滚动 */
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #000; touch-action: none; }
         
-        .dock-btn span { font-size: 10px; margin-top: 4px; font-weight: 500; }
+        /* 调试控制台 (如果不报错会自动隐藏) */
+        #console-log {
+            position: absolute; top: 0; left: 0; width: 100%; height: auto;
+            max-height: 100px; overflow-y: scroll;
+            background: rgba(255,0,0,0.5); color: white;
+            font-size: 10px; pointer-events: none; z-index: 9999;
+            display: none; /* 默认隐藏，有错误再显示 */
+        }
+
+        /* 顶部标题栏 */
+        #header {
+            position: absolute; top: 10px; left: 10px; z-index: 500;
+            color: rgba(255,255,255,0.7); font-family: sans-serif; font-weight: bold;
+            text-shadow: 0 1px 2px black; pointer-events: none;
+        }
+
+        /* 加载进度 */
+        #loader {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            color: #0f0; font-family: monospace; font-size: 16px;
+            background: rgba(0,0,0,0.8); padding: 20px; border-radius: 10px;
+            pointer-events: none; z-index: 1000; text-align: center;
+        }
+
+        /* 底部工具栏容器 */
+        #toolbar {
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 15px; background: rgba(20,20,20,0.9);
+            padding: 10px 20px; border-radius: 50px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            border: 1px solid #333; z-index: 500;
+        }
+
+        /* 工具按钮 */
+        .btn {
+            width: 50px; height: 50px; border-radius: 50%; border: none;
+            background: #333; color: #aaa; font-size: 20px;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: 0.2s; -webkit-tap-highlight-color: transparent;
+        }
+        .btn:active { transform: scale(0.9); }
+        .btn.active { background: #007bff; color: white; box-shadow: 0 0 15px #007bff; }
         
-        /* 激活状态 */
-        .dock-btn.active { 
-            background: #333; color: #00ff88; transform: translateY(-5px);
-            box-shadow: 0 5px 15px rgba(0,255,136,0.2);
-        }
-        /* 激活时的图标颜色 */
-        .dock-btn.active.mode-move { color: #ff5555; box-shadow: 0 5px 15px rgba(255,85,85,0.2); }
-        .dock-btn.active.mode-rotate { color: #55ff55; box-shadow: 0 5px 15px rgba(85,255,85,0.2); }
-        .dock-btn.active.mode-scale { color: #5555ff; box-shadow: 0 5px 15px rgba(85,85,255,0.2); }
+        /* 隐藏掉没用的按钮 */
+        .btn[disabled] { opacity: 0.2; pointer-events: none; }
 
-        /* 分割线 */
-        .divider { width: 1px; height: 40px; background: #555; }
-
-        /* 加载条 */
-        #progress { position: absolute; top:0; left:0; height:3px; background:#00ff88; width:0%; transition:width 0.2s; z-index:3000; }
-
-        /* 提示遮罩 */
-        #tip-overlay {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center;
-            z-index: 5000; color: white; text-align: center; pointer-events: none;
-            opacity: 0; transition: opacity 0.5s;
-        }
     </style>
-
+    
+    <!-- 引入库 -->
     <script type="importmap">
     {
         "imports": {
@@ -99,75 +69,168 @@
 </head>
 <body>
 
-    <div id="progress"></div>
-    <div id="status-pill"><span>📡</span> <span id="status-msg">初始化...</span></div>
+    <!-- 错误日志区 -->
+    <div id="console-log"></div>
     
-    <!-- 模式提示 -->
-    <div id="mode-indicator"><span class="mode-tag" id="mode-text">👀 浏览模式：单指旋转，双指缩放</span></div>
+    <!-- 加载提示 -->
+    <div id="loader">🚀 引擎启动中...</div>
+    
+    <!-- 标题 -->
+    <div id="header">3DGS Viewer (Orbit Mode)</div>
 
-    <!-- 底部 Dock 栏 -->
-    <div id="dock">
-        <!-- 浏览模式 (默认) -->
-        <button class="dock-btn active" id="btn-view" onclick="setMode('view')">
-            <span>👁️</span><span>浏览</span>
-        </button>
-        
-        <div class="divider"></div>
-
-        <!-- 编辑工具 -->
-        <button class="dock-btn mode-move" id="btn-translate" onclick="setMode('translate')">
-            <span>✢</span><span>移动</span>
-        </button>
-        <button class="dock-btn mode-rotate" id="btn-rotate" onclick="setMode('rotate')">
-            <span>↻</span><span>旋转</span>
-        </button>
-        <button class="dock-btn mode-scale" id="btn-scale" onclick="setMode('scale')">
-            <span>⤢</span><span>缩放</span>
-        </button>
-
-        <div class="divider"></div>
-
-        <!-- 重置 -->
-        <button class="dock-btn" id="btn-reset" onclick="resetAll()">
-            <span>↺</span><span>重置</span>
-        </button>
+    <!-- 底部按钮 -->
+    <div id="toolbar">
+        <button class="btn active" id="mode-view" onclick="app.setMode('view')">👁️</button>
+        <div style="width:1px; background:#444; margin:0 5px;"></div>
+        <button class="btn" id="mode-move" onclick="app.setMode('translate')">✢</button>
+        <button class="btn" id="mode-rotate" onclick="app.setMode('rotate')">↻</button>
+        <button class="btn" id="mode-scale" onclick="app.setMode('scale')">⤢</button>
     </div>
 
     <script type="module">
         import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
         import { TransformControls } from 'three/addons/controls/TransformControls.js';
-        import { OrbitControls } from 'https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js';
         import { Viewer } from '@mkkellogg/gaussian-splats-3d';
 
-        // 你的模型链接
-        const MODEL_URL = 'https://huggingface.co/datasets/liu1230/my-3dgs/resolve/main/scene.splat';
-
-        // 全局变量
-        let viewer, transformControl, splatMesh, controls;
-        let currentMode = 'view'; // view | translate | rotate | scale
-        
-        const ui = {
-            bar: document.getElementById('progress'),
-            msg: document.getElementById('status-msg'),
-            pill: document.getElementById('status-pill'),
-            indicator: document.getElementById('mode-indicator'),
-            modeText: document.getElementById('mode-text'),
-            btns: document.querySelectorAll('.dock-btn')
+        // 捕获报错显示在屏幕上
+        window.onerror = function(msg, url, line) {
+            const log = document.getElementById('console-log');
+            log.style.display = 'block';
+            log.innerHTML += `❌ Error: ${msg} (Line ${line})<br>`;
         };
 
-        // --- 1. 初始化引擎 ---
-        async function init() {
-            viewer = new Viewer({
-                'cameraUp': [0, 1, 0],
-                'initialCameraPosition': [0, 2, 5],
-                'initialCameraLookAt': [0, 0, 0],
-                'useBuiltInControls': true, 
-                'sharedMemoryForWorkers': false,
-                'splatAlphaRemovalThreshold': 5 // 提高一点阈值，减少噪点
-            });
+        const MODEL_URL = 'https://huggingface.co/datasets/liu1230/my-3dgs/resolve/main/scene.splat';
 
-            viewer.renderer.domElement.style.touchAction = 'none';
-            document.body.appendChild(viewer.renderer.domElement);
+        class App {
+            constructor() {
+                this.viewer = null;
+                this.controls = null;     // 这里的 Controls 是 OrbitControls
+                this.transform = null;    // 这里的 Transform 是 Gizmo
+                this.splatMesh = null;
+                this.loader = document.getElementById('loader');
+            }
 
-            // 添加网格地面 (参考系)
-            const grid = new THREE.GridHelper(20, 20, 0x444444, 0
+            async init() {
+                try {
+                    // 1. 初始化 Viewer (⚠️ 关键：关闭内置控制 useBuiltInControls: false)
+                    this.viewer = new Viewer({
+                        'cameraUp': [0, 1, 0],
+                        'initialCameraPosition': [0, 1, 4],
+                        'initialCameraLookAt': [0, 0, 0],
+                        'useBuiltInControls': false, // 🚫 彻底禁用库自带的，我们自己接管
+                        'sharedMemoryForWorkers': false,
+                        'selfDrivenMode': true // 开启自驱动循环
+                    });
+
+                    // 绑定到页面
+                    document.body.appendChild(this.viewer.renderer.domElement);
+
+                    // 2. 手动挂载 OrbitControls (标准手感)
+                    this.setupOrbitControls();
+
+                    // 3. 添加网格辅助
+                    const grid = new THREE.GridHelper(10, 10, 0x666666, 0x222222);
+                    grid.position.y = -1;
+                    this.viewer.threeScene.add(grid);
+
+                    // 4. 初始化 Gizmo (变换控制器)
+                    this.setupGizmo();
+
+                    // 5. 下载并加载
+                    await this.loadModel();
+
+                    // 6. 开启渲染循环 (有些库如果不手动更新controls会卡住)
+                    this.animate();
+
+                } catch (e) {
+                    alert("初始化失败: " + e.message);
+                }
+            }
+
+            setupOrbitControls() {
+                // 必须传 camera 和 renderer.domElement
+                this.controls = new OrbitControls(this.viewer.camera, this.viewer.renderer.domElement);
+                this.controls.enableDamping = true; // 惯性滑动 (手感顺滑的关键)
+                this.controls.dampingFactor = 0.05;
+                this.controls.screenSpacePanning = true;
+                this.controls.minDistance = 0.1;
+                this.controls.maxDistance = 50;
+                
+                // 解决触摸冲突
+                this.controls.listenToKeyEvents(window); 
+            }
+
+            setupGizmo() {
+                this.transform = new TransformControls(this.viewer.camera, this.viewer.renderer.domElement);
+                this.transform.setSize(1.2); // 加大尺寸方便手机点
+                
+                // 关键事件：当拖拽 Gizmo 时，禁用 OrbitControls，防止视角乱跑
+                this.transform.addEventListener('dragging-changed', (event) => {
+                    this.controls.enabled = !event.value;
+                });
+
+                this.viewer.threeScene.add(this.transform);
+            }
+
+            async loadModel() {
+                this.loader.innerText = "⏳ 下载数据中...";
+                
+                const response = await fetch(MODEL_URL);
+                if(!response.ok) throw new Error("下载失败");
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob) + '#.splat';
+
+                this.loader.innerText = "⚙️ 解析模型...";
+                
+                // 加载
+                await this.viewer.addSplatScene(url, { 
+                    'showLoadingUI': false,
+                    'splatAlphaRemovalThreshold': 5
+                });
+
+                // 获取 Mesh
+                this.splatMesh = this.viewer.getSplatScene(0);
+                if (this.splatMesh) {
+                    this.loader.style.display = 'none';
+                    this.viewer.start(); // 启动引擎渲染
+                } else {
+                    throw new Error("模型加载为空");
+                }
+            }
+
+            setMode(mode) {
+                // 更新按钮 UI
+                document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+                document.getElementById(`mode-${mode === 'translate' ? 'move' : mode}`).classList.add('active');
+
+                if (mode === 'view') {
+                    this.transform.detach();
+                    this.controls.enabled = true; // 确保视角可以转动
+                } else {
+                    if (this.splatMesh) {
+                        this.transform.attach(this.splatMesh);
+                        this.transform.setMode(mode);
+                        // 注意：这里不要禁用 controls，只靠 dragging-changed 事件自动管理
+                    }
+                }
+            }
+
+            // 自定义渲染循环钩子
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                // 必须每一帧更新 OrbitControls 才能有惯性效果
+                if (this.controls) this.controls.update();
+            }
+        }
+
+        // 启动应用
+        const app = new App();
+        app.init();
+        
+        // 挂载到 window 方便 HTML 按钮调用
+        window.app = app;
+
+    </script>
+</body>
+</html>
