@@ -3,87 +3,156 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>3DGS 流量监控版</title>
+    <title>3DGS 最终完美版</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; color: #0f0; font-family: monospace; }
-        #log { position: absolute; top: 0; left: 0; padding: 20px; white-space: pre-wrap; z-index: 999; }
+        body { margin: 0; overflow: hidden; background-color: #000; }
+        
+        /* 加载提示文字 */
+        #info {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            color: #0f0; font-family: monospace; font-size: 16px; text-align: center;
+            background: rgba(0,0,0,0.8); padding: 20px; border-radius: 10px; z-index: 999;
+            pointer-events: none;
+        }
+
+        /* 启动按钮 (iOS强制要求) */
+        #startBtn {
+            position: absolute; bottom: 20%; left: 50%; transform: translateX(-50%);
+            padding: 15px 40px; font-size: 18px; background: white; border: none; border-radius: 30px;
+            display: none; /* 默认隐藏，加载完显示 */
+            z-index: 1000; cursor: pointer;
+        }
     </style>
+
+    <!-- 🟢 核心升级：使用 0.4.1 版本引擎 (修复 AbortablePromise 报错) -->
     <script type="importmap">
     {
         "imports": {
-            "three": "https://unpkg.com/three@0.157.0/build/three.module.js",
-            "three/addons/": "https://unpkg.com/three@0.157.0/examples/jsm/",
-            "@mkkellogg/gaussian-splats-3d": "https://unpkg.com/@mkkellogg/gaussian-splats-3d@0.3.9/build/gaussian-splats-3d.module.js"
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+            "@mkkellogg/gaussian-splats-3d": "https://unpkg.com/@mkkellogg/gaussian-splats-3d@0.4.1/build/gaussian-splats-3d.module.js"
         }
     }
     </script>
 </head>
 <body>
-    <div id="log">准备开始下载...</div>
+
+    <div id="info">准备加载...</div>
+    <button id="startBtn">点击开始沉浸体验</button>
+
     <script type="module">
         import * as THREE from 'three';
         import { Viewer } from '@mkkellogg/gaussian-splats-3d';
 
-        // 你的 Hugging Face 直链 (不要带 proxy)
-        const MODEL_URL = 'https://huggingface.co/datasets/liu1230/my-3dgs/resolve/main/scene.splat?download=true'; 
+        // ==============================================================
+        // 👇 请在这里填入你刚才测试通过的 Hugging Face 链接
+        // 注意：必须是 resolve 且不带 blob 的那个链接
+        const MODEL_FILE = 'https://huggingface.co/datasets/liu1230/my-3dgs/resolve/main/scene.splat?download=true';
+        // ==============================================================
 
-        const logDiv = document.getElementById('log');
-        function log(msg) { logDiv.innerText = msg; }
+        const infoDiv = document.getElementById('info');
+        const startBtn = document.getElementById('startBtn');
+        let viewer;
+        let isRunning = false;
+        let initialGyro = null;
 
-        async function start() {
+        // 陀螺仪防穿帮参数
+        const MAX_X = 0.5; // 上下限制幅度
+        const MAX_Y = 0.6; // 左右限制幅度
+
+        async function init() {
+            infoDiv.innerText = "🚀 引擎初始化 v0.4.1...";
+
+            viewer = new Viewer({
+                'cameraUp': [0, 1, 0],
+                'initialCameraPosition': [0, 1, 5], // 稍微往后退一点，避免在模型内部
+                'initialCameraLookAt': [0, 0, 0],
+                'sharedMemoryForWorkers': false, // 关闭共享内存以兼容更多手机
+            });
+
+            document.body.appendChild(viewer.renderer.domElement);
+
+            infoDiv.innerText = "📥 开始下载模型...\n(大文件请耐心等待)";
+
             try {
-                log("🚀 第一步：开始手动下载文件 (绕过引擎bug)...");
-                
-                const response = await fetch(MODEL_URL);
-                if (!response.ok) throw new Error("下载失败: " + response.status);
-
-                const reader = response.body.getReader();
-                let receivedLength = 0; // 当前收到的字节数
-                let chunks = []; // 存放二进制数据块
-                
-                while(true) {
-                    const {done, value} = await reader.read();
-                    if (done) break;
-                    
-                    chunks.push(value);
-                    receivedLength += value.length;
-                    
-                    // 实时显示下载量 (MB)
-                    const mb = (receivedLength / 1024 / 1024).toFixed(2);
-                    log(`📥 正在下载... 已接收: ${mb} MB`);
-                }
-
-                log(`✅ 下载完成！总大小: ${(receivedLength / 1024 / 1024).toFixed(2)} MB\n⚙️ 正在拼装数据...`);
-                
-                // 把所有数据块拼成一个大 Blob
-                const blob = new Blob(chunks);
-                const objectURL = URL.createObjectURL(blob);
-
-                log("🎬 启动 3D 引擎...");
-                
-                const viewer = new Viewer({
-                    'cameraUp': [0, 1, 0],
-                    'initialCameraPosition': [0, 1, 2],
-                    'initialCameraLookAt': [0, 0, 0],
-                });
-                
-                // 这里我们传的是本地内存里的 blob 链接，速度极快
-                viewer.addSplatScene(objectURL, {
+                await viewer.addSplatScene(MODEL_FILE, {
                     'showLoadingUI': false,
-                    'splatAlphaRemovalThreshold': 5,
-                    'scale': [1, 1, 1]
-                }).then(() => {
-                    log(""); // 清空日志
-                    viewer.start();
+                    'splatAlphaRemovalThreshold': 5, 
+                    'scale': [1, 1, 1],
+                    'rotation': [0, 0, 0, 1],
+                    'onProgress': (percent, percentStr) => {
+                         if (percentStr === 'NaN') {
+                             infoDiv.innerText = `📥 下载中... 数据流传输中`;
+                         } else {
+                             infoDiv.innerText = `📥 下载进度: ${percentStr}%`;
+                         }
+                    }
                 });
+
+                // 加载成功！
+                infoDiv.innerText = "✅ 加载完成！\n请点击下方按钮开始";
+                startBtn.style.display = 'block';
 
             } catch (err) {
-                log("❌ 错误: " + err.message);
+                console.error(err);
+                infoDiv.style.color = 'red';
+                infoDiv.innerText = "❌ 报错了:\n" + err.message;
             }
         }
 
-        start();
+        // 点击按钮启动陀螺仪
+        startBtn.addEventListener('click', async () => {
+            // 隐藏UI
+            startBtn.style.display = 'none';
+            infoDiv.style.display = 'none';
+            
+            viewer.start();
+            isRunning = true;
+
+            // 请求权限 (iOS 13+)
+            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                try {
+                    const response = await DeviceOrientationEvent.requestPermission();
+                    if (response === 'granted') {
+                        window.addEventListener('deviceorientation', handleOrientation);
+                    } else {
+                        alert('请允许陀螺仪权限');
+                    }
+                } catch (e) {
+                    console.error(e);
+                }
+            } else {
+                // 安卓直接监听
+                window.addEventListener('deviceorientation', handleOrientation);
+            }
+        });
+
+        // 陀螺仪逻辑 (防穿帮)
+        function handleOrientation(event) {
+            if (!viewer || !isRunning) return;
+
+            // 第一次读取数据时，设为零点
+            if (!initialGyro && event.alpha !== null) {
+                initialGyro = { beta: event.beta, gamma: event.gamma };
+                return;
+            }
+            if (!initialGyro) return;
+
+            // 计算角度差 (转化为弧度)
+            let deltaX = (event.beta - initialGyro.beta) * (Math.PI / 180);
+            let deltaY = (event.gamma - initialGyro.gamma) * (Math.PI / 180);
+
+            // 限制角度 (Clamp)
+            deltaX = Math.max(-MAX_X, Math.min(MAX_X, deltaX));
+            deltaY = Math.max(-MAX_Y, Math.min(MAX_Y, deltaY));
+
+            // 应用旋转 (只转动，不位移)
+            viewer.camera.rotation.set(deltaX, deltaY, 0, 'YXZ');
+            viewer.update(); // 强制更新
+        }
+
+        // 启动流程
+        init();
     </script>
 </body>
 </html>
-
