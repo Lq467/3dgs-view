@@ -3,17 +3,23 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>3DGS 陀螺仪防穿帮演示</title>
+    <title>3DGS 强力调试版</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #000; }
-        #info {
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            color: white; font-family: sans-serif; text-align: center;
-            background: rgba(0,0,0,0.7); padding: 20px; border-radius: 10px; z-index: 999;
+        body { margin: 0; overflow: hidden; background-color: #222; font-family: monospace; }
+        
+        /* 屏幕日志窗口：专门用来显示报错 */
+        #console-log {
+            position: absolute; top: 0; left: 0; width: 100%; height: 50%;
+            background: rgba(0,0,0,0.8); color: #0f0; pointer-events: none;
+            overflow-y: auto; padding: 10px; font-size: 12px; z-index: 9999;
+            white-space: pre-wrap; word-wrap: break-word;
         }
-        button { padding: 10px 20px; font-size: 16px; margin-top: 10px; cursor: pointer; }
+
+        #startBtn {
+            position: absolute; bottom: 10%; left: 50%; transform: translateX(-50%);
+            padding: 15px 30px; font-size: 18px; z-index: 100;
+        }
     </style>
-    <!-- 引入 Three.js 和 GaussianSplats3D 引擎 -->
     <script type="importmap">
     {
         "imports": {
@@ -26,137 +32,82 @@
 </head>
 <body>
 
-    <!-- 启动按钮（安卓必须用户点击才能获取陀螺仪权限） -->
-    <div id="info">
-        <h2>3DGS 陀螺仪查看器</h2>
-        <p>点击下方按钮开始体验</p>
-        <button id="startBtn">开始沉浸体验</button>
-    </div>
+    <!-- 这里会显示详细的下载进度和报错 -->
+    <div id="console-log">准备就绪...等待操作...</div>
+    <button id="startBtn">开始加载模型</button>
 
     <script type="module">
         import * as THREE from 'three';
         import { Viewer } from '@mkkellogg/gaussian-splats-3d';
 
-        // ================= 配置区域 (在这里修改你的参数) =================
-        // 1. 你的模型文件路径 (上传到GitHub后把文件名改在这里)
+        // ==========================================
+        // 【请在这里填入你的 Hugging Face 链接】
+        // 建议去掉 ?download=true
+        const MODEL_FILE = 'https://huggingface.co/你的用户名/仓库名/resolve/main/scene.splat';
+        // ==========================================
+
+        const logDiv = document.getElementById('console-log');
         
-        const MODEL_FILE = 'https://huggingface.co/datasets/liu1230/my-3dgs/resolve/main/scene.splat'; 
-
-        // 2. 初始相机位置 (根据你的模型调整，xyz坐标)
-        const INITIAL_POSITION = [0, 1, 2]; 
-
-        // 3. 视角限制范围 (防穿帮核心！单位是弧度，0.5大约是30度)
-        // 限制左右转动的幅度
-        const MAX_Y_ANGLE = 0.6; 
-        // 限制上下转动的幅度
-        const MAX_X_ANGLE = 0.4; 
-
-        // 4. 视场角 (FOV)，越小越像长焦，越大越像广角，默认60接近人眼
-        const CAMERA_FOV = 60; 
-        // ==============================================================
-
-        let viewer;
-        let isRunning = false;
-        let initialGyro = null;
-
-        const startBtn = document.getElementById('startBtn');
-        const infoDiv = document.getElementById('info');
-
-        startBtn.addEventListener('click', async () => {
-            // 请求设备方向权限 (iOS 13+ 需要，安卓部分版本也建议)
-            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-                try {
-                    const response = await DeviceOrientationEvent.requestPermission();
-                    if (response === 'granted') {
-                        initViewer();
-                    } else {
-                        alert('需要陀螺仪权限才能控制视角');
-                    }
-                } catch (e) {
-                    console.error(e);
-                    // 非iOS设备通常直接进入
-                    initViewer();
-                }
-            } else {
-                // 非iOS设备 (安卓) 直接运行
-                initViewer();
-            }
-        });
-
-        function initViewer() {
-            infoDiv.style.display = 'none';
-            
-            // 初始化 3DGS 查看器引擎
-            viewer = new Viewer({
-                'cameraUp': [0, 1, 0],
-                'initialCameraPosition': INITIAL_POSITION,
-                'initialCameraLookAt': [0, 0, 0],
-                'cameraFoo': CAMERA_FOV, // 设置FOV
-                'halfPrecisionCovariancesOnGPU': true,
-            });
-
-            // 加载模型
-            viewer.addSplatScene(MODEL_FILE, {
-                'showLoadingUI': true,
-                'splatAlphaRemovalThreshold': 5, // 移除半透明杂点
-                'scale': [1, 1, 1],
-                'rotation': [0, 0, 0, 1] // 四元数旋转，如果模型倒了可以在这改
-            })
-            .then(() => {
-                viewer.start();
-                isRunning = true;
-                
-                // 监听陀螺仪数据
-                window.addEventListener('deviceorientation', handleOrientation);
-            });
+        // 重写 console.log，让它显示在屏幕上
+        function log(msg) {
+            logDiv.innerHTML += msg + '\n';
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(msg);
         }
 
-        // 陀螺仪控制逻辑
-        function handleOrientation(event) {
-            if (!viewer || !isRunning) return;
+        function error(msg) {
+            logDiv.innerHTML += '<span style="color:red">[ERROR] ' + msg + '</span>\n';
+            console.error(msg);
+        }
 
-            const camera = viewer.camera;
-            
-            // beta 是前后倾斜 (-180 到 180) -> 对应相机 X 轴 (上下看)
-            // gamma 是左右倾斜 (-90 到 90) -> 对应相机 Y 轴 (左右看)
-            // 注意：安卓和iOS的坐标系有时不同，这里按通用Web标准写的
-            
-            let x = event.beta;  // 上下
-            let y = event.gamma; // 左右
+        document.getElementById('startBtn').addEventListener('click', () => {
+            log("正在初始化引擎...");
+            init();
+        });
 
-            // 记录初始角度作为“零点”
-            if (initialGyro === null) {
-                initialGyro = { x: x, y: y };
-                return;
+        function init() {
+            try {
+                const viewer = new Viewer({
+                    'cameraUp': [0, 1, 0],
+                    'initialCameraPosition': [0, 1, 5],
+                    'initialCameraLookAt': [0, 0, 0],
+                });
+
+                // 监听下载进度（如果服务器支持）
+                log("开始请求文件: " + MODEL_FILE);
+                
+                viewer.addSplatScene(MODEL_FILE, {
+                    'showLoadingUI': false, // 我们自己打印日志，关掉默认UI
+                    'splatAlphaRemovalThreshold': 5,
+                    'scale': [1, 1, 1],
+                    // 自定义进度回调函数
+                    'onProgress': (percent, percentStr, chunk) => {
+                        log(`下载中... ${percentStr}%`);
+                    }
+                })
+                .then(() => {
+                    log("✅ 加载完成！Processing...");
+                    viewer.start();
+                    log("🚀 渲染已启动！");
+                    // 隐藏日志框以便观看
+                    setTimeout(() => { logDiv.style.display = 'none'; }, 3000);
+                })
+                .catch((err) => {
+                    error("加载失败！原因如下：");
+                    error(err.message || JSON.stringify(err));
+                    
+                    // 常见错误判断
+                    if(err.message && err.message.includes('404')) {
+                        error("👉 分析：链接错了，找不到文件。请检查URL是否包含 resolve/main");
+                    } else if(err.message && err.message.includes('Cors') || err.message.includes('Failed to fetch')) {
+                        error("👉 分析：跨域(CORS)被拦截。");
+                    }
+                });
+
+            } catch (e) {
+                error("系统崩溃：" + e.message);
             }
-
-            // 计算相对角度差 (转为弧度)
-            let deltaX = (x - initialGyro.x) * (Math.PI / 180);
-            let deltaY = (y - initialGyro.y) * (Math.PI / 180);
-
-            // === 核心防穿帮：限制角度 ===
-            // 使用 clamp 函数把角度锁死在设定范围内
-            deltaX = Math.max(-MAX_X_ANGLE, Math.min(MAX_X_ANGLE, deltaX));
-            deltaY = Math.max(-MAX_Y_ANGLE, Math.min(MAX_Y_ANGLE, deltaY));
-
-            // 应用旋转
-            // 这里我们保持相机位置不变，只改变朝向
-            // 这是一个简单的欧拉角应用，更复杂的可以用四元数
-            camera.rotation.set(
-                deltaX, // 上下看
-                deltaY, // 左右看
-                0,      // 忽略 Z 轴滚转 (防止晕车)
-                'YXZ'
-            );
-            
-            // 确保渲染器知道相机更新了
-            viewer.renderer.render(viewer.scene, viewer.camera);
         }
     </script>
 </body>
-
 </html>
-
-
-
-
