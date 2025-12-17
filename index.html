@@ -3,28 +3,23 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>3DGS 终极修正版</title>
+    <title>3DGS 成功运行版</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
-        
-        /* 状态提示栏 */
         #status-bar {
             position: absolute; top: 0; left: 0; width: 100%; 
             padding: 15px; background: rgba(0,0,0,0.8); 
             color: #0f0; text-align: center; font-size: 14px; 
             z-index: 999; pointer-events: none;
         }
-
-        /* 开始按钮 */
         #start-btn {
             position: absolute; bottom: 15%; left: 50%; transform: translateX(-50%);
             padding: 12px 30px; font-size: 18px; border-radius: 25px;
             background: white; border: none; cursor: pointer; display: none;
-            z-index: 1000; box-shadow: 0 0 10px rgba(255,255,255,0.5);
+            z-index: 1000;
         }
     </style>
-
-    <!-- 🟢 核心修复：升级到最新 v0.4.7 版本，彻底解决 Promise 报错 -->
+    <!-- 使用最新的 0.4.7 引擎 -->
     <script type="importmap">
     {
         "imports": {
@@ -37,59 +32,52 @@
 </head>
 <body>
 
-    <div id="status-bar">正在连接引擎 v0.4.7...</div>
+    <div id="status-bar">正在连接...</div>
     <button id="start-btn">开启陀螺仪观看</button>
 
     <script type="module">
         import * as THREE from 'three';
         import { Viewer } from '@mkkellogg/gaussian-splats-3d';
 
-        // ==============================================================
-        // 👇 请把你的 Hugging Face 直链粘贴在这里
+        // 👇 这里填你的链接 (带不带 ?download=true 都可以了，因为下面加了 format 锁)
         const MODEL_FILE = 'https://huggingface.co/datasets/liu1230/my-3dgs/resolve/main/scene.splat?download=true';
-        // ==============================================================
 
         const status = document.getElementById('status-bar');
         const btn = document.getElementById('start-btn');
         let viewer;
         let isRunning = false;
         let initialGyro = null;
-
-        // 陀螺仪限制角度（防穿帮）
-        const CLAMP_X = 0.5; // 上下约30度
-        const CLAMP_Y = 0.6; // 左右约35度
+        
+        // 陀螺仪角度限制
+        const CLAMP_X = 0.5; 
+        const CLAMP_Y = 0.6; 
 
         async function main() {
-            // 1. 初始化引擎
             viewer = new Viewer({
                 'cameraUp': [0, 1, 0],
-                'initialCameraPosition': [0, 1, 4], // 相机位置
+                'initialCameraPosition': [0, 1, 4],
                 'initialCameraLookAt': [0, 0, 0],
-                // 启用共享内存（若手机白屏可改为 false）
-                'sharedMemoryForWorkers': false, 
+                'sharedMemoryForWorkers': false,
             });
-
             document.body.appendChild(viewer.renderer.domElement);
 
-            // 2. 加载模型
-            status.innerText = "正在请求文件，请稍候...";
+            status.innerText = "正在请求文件...";
             
             try {
                 await viewer.addSplatScene(MODEL_FILE, {
-                    'showLoadingUI': false, // 关闭默认UI，用我们自己的
+                    'showLoadingUI': false,
+                    'format': 'splat',            // 🟢 关键修复：强制指定格式！
                     'splatAlphaRemovalThreshold': 5, 
                     'onProgress': (percent, percentStr) => {
-                        // 即使是 NaN 也不要慌，说明在下载流
                         if (percentStr === 'NaN') {
-                            status.innerText = `📥 正在下载数据流... (保持网络通畅)`;
+                            status.innerText = `📥 下载中... (数据流传输中)`;
                         } else {
                             status.innerText = `📥 下载进度: ${percentStr}%`;
                         }
                     }
                 });
 
-                // 3. 加载成功
-                status.innerText = "✅ 模型就绪！请点击下方按钮";
+                status.innerText = "✅ 加载成功！请点击下方按钮";
                 status.style.color = "#fff";
                 btn.style.display = "block";
 
@@ -97,11 +85,11 @@
                 console.error(err);
                 status.innerText = "❌ 错误: " + err.message;
                 status.style.color = "red";
-                // 只有 v0.4.7 才能正确捕获这个错误，不会再报 .reject 不是函数了
+                // 如果这里报 "Invalid splat file"，说明文件内容是网页而不是二进制
+                // 那就需要检查 Hugging Face 仓库是否是 Private
             }
         }
 
-        // 4. 按钮点击事件
         btn.addEventListener('click', () => {
             btn.style.display = 'none';
             status.style.display = 'none';
@@ -110,46 +98,34 @@
             requestGyro();
         });
 
-        // 5. 申请陀螺仪权限
         function requestGyro() {
             if (typeof DeviceOrientationEvent !== 'undefined' && 
                 typeof DeviceOrientationEvent.requestPermission === 'function') {
-                // iOS 13+ 需要申请
                 DeviceOrientationEvent.requestPermission()
                     .then(response => {
                         if (response === 'granted') {
                             window.addEventListener('deviceorientation', handleOrientation);
                         } else {
-                            alert('需要允许陀螺仪权限才能观看');
+                            alert('需允许陀螺仪权限');
                         }
-                    })
-                    .catch(console.error);
+                    }).catch(console.error);
             } else {
-                // 安卓 / 普通设备直接监听
                 window.addEventListener('deviceorientation', handleOrientation);
             }
         }
 
-        // 6. 陀螺仪控制逻辑
         function handleOrientation(event) {
             if (!viewer || !isRunning) return;
-
-            // 记录初始角度
             if (!initialGyro && event.alpha !== null) {
                 initialGyro = { beta: event.beta, gamma: event.gamma };
                 return;
             }
             if (!initialGyro) return;
 
-            // 计算差值
             let deltaX = (event.beta - initialGyro.beta) * (Math.PI / 180);
             let deltaY = (event.gamma - initialGyro.gamma) * (Math.PI / 180);
-
-            // 限制角度 (Clamp)
             deltaX = Math.max(-CLAMP_X, Math.min(CLAMP_X, deltaX));
             deltaY = Math.max(-CLAMP_Y, Math.min(CLAMP_Y, deltaY));
-
-            // 应用旋转
             viewer.camera.rotation.set(deltaX, deltaY, 0, 'YXZ');
             viewer.update();
         }
