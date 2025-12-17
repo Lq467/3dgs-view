@@ -3,71 +3,59 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3DGS 全屏手势版</title>
+    <title>3DGS 完美内核版</title>
     <style>
+        /* 1. 基础环境：黑底、无滚动 */
         body, html {
             width: 100%; height: 100%; margin: 0; padding: 0;
             overflow: hidden; background-color: #000;
-            touch-action: none; /* 禁止系统滚动 */
+            touch-action: none; /* 关键：禁止系统触摸，全权交给JS */
             font-family: sans-serif; user-select: none;
         }
 
-        /* 顶部操作说明 */
-        #header {
+        /* 2. 顶部锁定按钮 (核心交互) */
+        #top-area {
             position: absolute; top: 20px; left: 0; width: 100%;
-            text-align: center; pointer-events: none; z-index: 1000;
+            display: flex; justify-content: center; pointer-events: none; z-index: 2000;
         }
-        .status-pill {
-            background: rgba(30,30,30,0.9); color: #00ff88;
-            padding: 8px 20px; border-radius: 30px; font-size: 14px; font-weight: bold;
-            display: inline-block; border: 1px solid #555;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        #lock-btn {
+            pointer-events: auto; /* 允许点击 */
+            background: rgba(0, 0, 0, 0.6); color: #fff; border: 1px solid #555;
+            padding: 10px 25px; border-radius: 30px; font-weight: bold; font-size: 14px;
+            display: flex; align-items: center; gap: 8px; backdrop-filter: blur(5px);
+            transition: all 0.2s; opacity: 0; transform: translateY(-20px);
         }
+        #lock-btn.visible { opacity: 1; transform: translateY(0); }
+        #lock-btn.locked { background: #ffaa00; color: #000; border-color: #ffaa00; box-shadow: 0 0 15px rgba(255,170,0,0.5); }
 
-        /* 底部工具栏 */
+        /* 3. 底部操作栏 */
         #dock {
             position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
-            background: #1a1a1a; padding: 10px; border-radius: 20px;
-            display: flex; gap: 12px; border: 1px solid #444; z-index: 1000;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+            background: rgba(20,20,20,0.95); padding: 10px; border-radius: 20px;
+            display: flex; gap: 12px; border: 1px solid #444; z-index: 2000;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
         }
 
         .btn {
-            width: 60px; height: 60px; background: #333; border: 1px solid #444;
-            border-radius: 14px; color: #888; font-size: 24px;
+            width: 55px; height: 55px; background: transparent; border: none;
+            color: #888; font-size: 24px; border-radius: 12px;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
-            transition: all 0.1s; position: relative;
         }
-        .btn span { font-size: 11px; margin-top: 4px; }
+        .btn span { font-size: 11px; margin-top: 3px; }
         
-        .btn.active { background: #007bff; color: white; transform: scale(1.05); border-color: #00aaff; }
-        .btn.active.view { background: #00ff88; color: #000; border-color: #00ff88; }
-        .btn.active.edit { background: #ffaa00; color: #000; border-color: #ffaa00; }
+        .btn.active { background: #333; color: white; transform: translateY(-3px); }
+        .btn.active.view { color: #00ff88; }
+        .btn.active.edit { color: #00aaff; }
 
-        /* 中心参考十字线 (仅编辑模式显示) */
-        #crosshair {
-            position: absolute; top: 50%; left: 50%; width: 20px; height: 20px;
-            transform: translate(-50%, -50%); pointer-events: none; z-index: 500;
-            display: none; opacity: 0.5;
-        }
-        #crosshair::before, #crosshair::after {
-            content: ''; position: absolute; background: white;
-        }
-        #crosshair::before { top: 9px; left: 0; width: 20px; height: 2px; }
-        #crosshair::after { top: 0; left: 9px; width: 2px; height: 20px; }
+        /* 分割线 */
+        .sep { width: 1px; height: 35px; background: #444; margin: 10px 2px; }
 
-        /* 触摸反馈圆点 */
-        #touch-feedback {
-            position: absolute; width: 40px; height: 40px;
-            border: 2px solid rgba(255,255,255,0.5); border-radius: 50%;
-            transform: translate(-50%, -50%); pointer-events: none; z-index: 9000;
-            display: none;
-        }
-
+        /* 加载动画 */
         #loader {
             position: absolute; top:0; left:0; width:100%; height:100%; background:#000;
             display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:9999;
         }
+        .loader-text { color:#00ff88; margin-top:15px; font-family:monospace; }
     </style>
 
     <script type="importmap">
@@ -83,29 +71,26 @@
 <body>
 
     <div id="loader">
-        <div style="font-size:30px;">⏳</div>
-        <div style="color:#888; margin-top:10px;">资源加载中...</div>
+        <div style="font-size:30px;">🛰️</div>
+        <div class="loader-text" id="load-msg">启动引擎...</div>
     </div>
 
-    <div id="header">
-        <div class="status-pill" id="status">👀 浏览模式</div>
+    <div id="top-area">
+        <button id="lock-btn" onclick="app.toggleLock()">🔓 视角未锁</button>
     </div>
-
-    <div id="crosshair"></div>
-    <div id="touch-feedback"></div>
 
     <div id="dock">
-        <button class="btn active view" onclick="app.setMode('view')" id="btn-view">
+        <button class="btn active view" id="b-view" onclick="app.setMode('view')">
             👁️<span>浏览</span>
         </button>
-        <div style="width:1px; background:#444; margin:0 5px;"></div>
-        <button class="btn" onclick="app.setMode('translate')" id="btn-translate">
+        <div class="sep"></div>
+        <button class="btn" id="b-translate" onclick="app.setMode('translate')">
             ✢<span>移动</span>
         </button>
-        <button class="btn" onclick="app.setMode('rotate')" id="btn-rotate">
+        <button class="btn" id="b-rotate" onclick="app.setMode('rotate')">
             ↻<span>旋转</span>
         </button>
-        <button class="btn" onclick="app.setMode('scale')" id="btn-scale">
+        <button class="btn" id="b-scale" onclick="app.setMode('scale')">
             ⤢<span>缩放</span>
         </button>
     </div>
@@ -113,6 +98,7 @@
     <script type="module">
         import * as THREE from 'three';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { TransformControls } from 'three/addons/controls/TransformControls.js';
         import { Viewer } from '@mkkellogg/gaussian-splats-3d';
 
         const MODEL_URL = 'https://huggingface.co/datasets/liu1230/my-3dgs/resolve/main/scene.splat';
@@ -120,184 +106,153 @@
         class App {
             constructor() {
                 this.viewer = null;
-                this.orbit = null;
-                this.container = null; // 我们的模型容器
-                this.helper = null;
-                this.mode = 'view';
-                
-                // 触摸控制变量
-                this.isDragging = false;
-                this.lastX = 0;
-                this.lastY = 0;
+                this.controls = null;
+                this.gizmo = null;
+                this.sceneRoot = null; // 我们的模型容器
+                this.isLocked = false;
             }
 
             async init() {
-                // 1. 初始化 Viewer (禁用一切自带控制)
-                this.viewer = new Viewer({
-                    'cameraUp': [0, 1, 0],
-                    'initialCameraPosition': [0, 1, 5],
-                    'initialCameraLookAt': [0, 0, 0],
-                    'useBuiltInControls': false, 
-                    'selfDrivenMode': false,
-                    'sharedMemoryForWorkers': false
-                });
-
-                document.body.appendChild(this.viewer.renderer.domElement);
-
-                // 2. 创建容器 (所有模型都放这里面)
-                this.container = new THREE.Group();
-                this.viewer.threeScene.add(this.container);
-
-                // 3. OrbitControls (仅用于浏览模式)
-                this.orbit = new OrbitControls(this.viewer.camera, this.viewer.renderer.domElement);
-                this.orbit.enableDamping = true;
-                this.orbit.dampingFactor = 0.08;
-
-                // 4. 添加网格和包围盒(视觉辅助)
-                const grid = new THREE.GridHelper(20, 20, 0x333333, 0x111111);
-                grid.position.y = -1;
-                this.viewer.threeScene.add(grid);
-
-                this.helper = new THREE.BoxHelper(this.container, 0xffff00);
-                this.helper.visible = false;
-                this.viewer.threeScene.add(this.helper);
-
-                // 5. 绑定全屏触摸事件 (核心逻辑)
-                this.setupTouchInput();
-
-                // 6. 启动循环
-                this.animate();
-
-                // 7. 加载
-                await this.loadModel();
-            }
-
-            setupTouchInput() {
-                const canvas = this.viewer.renderer.domElement;
-                const feedback = document.getElementById('touch-feedback');
-
-                // 触摸开始
-                canvas.addEventListener('pointerdown', (e) => {
-                    this.isDragging = true;
-                    this.lastX = e.clientX;
-                    this.lastY = e.clientY;
+                try {
+                    // 1. 初始化 Viewer (完全复刻“完美版”的配置)
+                    // 核心：关闭内置控制，关闭自驱动
+                    this.viewer = new Viewer({
+                        'cameraUp': [0, 1, 0],
+                        'initialCameraPosition': [0, 1, 5],
+                        'initialCameraLookAt': [0, 0, 0],
+                        'useBuiltInControls': false, 
+                        'selfDrivenMode': false,
+                        'sharedMemoryForWorkers': false
+                    });
                     
-                    // 显示触摸反馈
-                    if (this.mode !== 'view') {
-                        feedback.style.display = 'block';
-                        feedback.style.left = e.clientX + 'px';
-                        feedback.style.top = e.clientY + 'px';
-                    }
-                });
+                    document.body.appendChild(this.viewer.renderer.domElement);
 
-                // 触摸移动
-                canvas.addEventListener('pointermove', (e) => {
-                    if (!this.isDragging) return;
-                    
-                    if (this.mode !== 'view') {
-                        // 更新反馈UI位置
-                        feedback.style.left = e.clientX + 'px';
-                        feedback.style.top = e.clientY + 'px';
-                        
-                        // 计算滑动距离 (Delta)
-                        const dx = e.clientX - this.lastX;
-                        const dy = e.clientY - this.lastY;
-                        
-                        // 应用变换 (核心：手指动，模型就动)
-                        this.applyTransform(dx, dy);
-                    }
+                    // 2. 创建容器 Group (解决模型无法移动的问题)
+                    this.sceneRoot = new THREE.Group();
+                    this.viewer.threeScene.add(this.sceneRoot);
 
-                    this.lastX = e.clientX;
-                    this.lastY = e.clientY;
-                });
+                    // 3. OrbitControls (绑定到 document.body 确保全屏响应)
+                    this.controls = new OrbitControls(this.viewer.camera, document.body);
+                    this.controls.enableDamping = true; // 惯性
+                    this.controls.dampingFactor = 0.05;
+                    // 🔓 解锁视角限制：允许从正上方看到正下方 (0 ~ PI)
+                    this.controls.minPolarAngle = 0;
+                    this.controls.maxPolarAngle = Math.PI; 
+                    this.controls.minDistance = 0.1;
+                    this.controls.maxDistance = 100;
 
-                // 触摸结束
-                const endDrag = () => {
-                    this.isDragging = false;
-                    feedback.style.display = 'none';
-                };
-                canvas.addEventListener('pointerup', endDrag);
-                canvas.addEventListener('pointerleave', endDrag);
-            }
+                    // 4. TransformControls (坐标轴)
+                    this.gizmo = new TransformControls(this.viewer.camera, this.viewer.renderer.domElement);
+                    this.gizmo.setSize(1.2); // 放大
+                    this.gizmo.setSpace('local');
+                    // 🔥 强制坐标轴穿透显示 (DepthTest False)
+                    this.gizmo.traverse(child => {
+                        if(child.material) {
+                            child.material.depthTest = false;
+                            child.material.depthWrite = false;
+                            child.renderOrder = 9999;
+                        }
+                    });
 
-            applyTransform(dx, dy) {
-                // 移动速度系数
-                const moveSpeed = 0.01;
-                const rotSpeed = 0.005;
-                const scaleSpeed = 0.01;
+                    // 自动互斥：拖动坐标轴时，暂停相机
+                    this.gizmo.addEventListener('dragging-changed', (event) => {
+                        if (!this.isLocked) {
+                            this.controls.enabled = !event.value;
+                        }
+                    });
+                    this.viewer.threeScene.add(this.gizmo);
 
-                if (this.mode === 'translate') {
-                    // 移动：手指滑多远，模型移多远
-                    // 获取相机朝向来决定移动方向（简单版：直接改XYZ）
-                    this.container.position.x += dx * moveSpeed;
-                    this.container.position.y -= dy * moveSpeed; 
-                } 
-                else if (this.mode === 'rotate') {
-                    // 旋转：左右滑绕Y轴转
-                    this.container.rotation.y += dx * rotSpeed;
-                    // 上下滑绕X轴转
-                    this.container.rotation.x += dy * rotSpeed;
-                } 
-                else if (this.mode === 'scale') {
-                    // 缩放：向上滑放大，向下滑缩小
-                    let s = this.container.scale.x - (dy * scaleSpeed);
-                    if (s < 0.1) s = 0.1; // 最小限制
-                    if (s > 10) s = 10;   // 最大限制
-                    this.container.scale.set(s, s, s);
+                    // 5. 添加网格辅助
+                    const grid = new THREE.GridHelper(20, 20, 0x444444, 0x111111);
+                    grid.position.y = -1;
+                    this.viewer.threeScene.add(grid);
+
+                    // 6. 启动手动渲染循环
+                    this.animate();
+
+                    // 7. 加载模型
+                    await this.loadModel();
+
+                } catch (e) {
+                    alert("启动失败: " + e.message);
                 }
             }
 
             async loadModel() {
+                const msg = document.getElementById('load-msg');
+                msg.innerText = "下载数据...";
+                
                 const response = await fetch(MODEL_URL);
                 const blob = await response.blob();
                 const url = URL.createObjectURL(blob) + '#.splat';
 
+                msg.innerText = "解析模型...";
                 await this.viewer.addSplatScene(url, { 'showLoadingUI': false });
 
-                // 把 Splat 放入容器
+                // 等待模型生成
                 setTimeout(() => {
                     const splat = this.viewer.getSplatScene(0);
                     if (splat) {
-                        this.container.add(splat);
+                        // ⚠️ 核心修复：把模型放入 sceneRoot 容器
+                        this.sceneRoot.add(splat);
+                        
                         document.getElementById('loader').style.display = 'none';
+                        this.setMode('view'); // 默认进入浏览
                     }
-                }, 200);
+                }, 500);
             }
 
             setMode(mode) {
-                this.mode = mode;
-                
                 // UI 更新
                 document.querySelectorAll('.btn').forEach(b => b.classList.remove('active', 'view', 'edit'));
-                const btn = document.getElementById('btn-' + mode);
+                const btn = document.getElementById('b-' + mode);
                 btn.classList.add('active', mode === 'view' ? 'view' : 'edit');
 
-                const status = document.getElementById('status');
-                const crosshair = document.getElementById('crosshair');
+                const lockBtn = document.getElementById('lock-btn');
 
                 if (mode === 'view') {
-                    this.orbit.enabled = true; // 开启视角
-                    this.helper.visible = false;
-                    crosshair.style.display = 'none';
-                    status.innerText = "👀 浏览模式";
-                    status.style.color = "#00ff88";
-                    status.style.borderColor = "#00ff88";
+                    // === 浏览模式 ===
+                    this.gizmo.detach();
+                    this.unlockCamera(); // 强制解锁
+                    lockBtn.classList.remove('visible'); // 隐藏锁定按钮
                 } else {
-                    this.orbit.enabled = false; // 🔒 锁死视角
-                    this.helper.visible = true; // 显示黄框
-                    crosshair.style.display = 'block';
+                    // === 编辑模式 ===
+                    this.gizmo.attach(this.sceneRoot); // 附着到容器上
+                    this.gizmo.setMode(mode);
                     
-                    const actionName = mode==='translate'?'平移':(mode==='rotate'?'旋转':'缩放');
-                    status.innerText = `🖐️ ${actionName}模式：在屏幕任意处滑动`;
-                    status.style.color = "#ffaa00";
-                    status.style.borderColor = "#ffaa00";
+                    lockBtn.classList.add('visible'); // 显示锁定按钮
+                    // 默认先不锁，让用户自己锁，或者你可以选择默认锁
+                    // 这里为了防止误触，我们**自动锁定**一下试试？
+                    // 不，还是让用户手动锁比较符合直觉。
                 }
+            }
+
+            toggleLock() {
+                if (this.isLocked) this.unlockCamera();
+                else this.lockCamera();
+            }
+
+            lockCamera() {
+                this.isLocked = true;
+                this.controls.enabled = false; // 禁止相机
+                const btn = document.getElementById('lock-btn');
+                btn.classList.add('locked');
+                btn.innerText = "🔒 视角已锁 (可拖动模型)";
+            }
+
+            unlockCamera() {
+                this.isLocked = false;
+                this.controls.enabled = true; // 启用相机
+                const btn = document.getElementById('lock-btn');
+                btn.classList.remove('locked');
+                btn.innerText = "🔓 视角未锁";
             }
 
             animate() {
                 requestAnimationFrame(() => this.animate());
-                this.orbit.update();
-                if(this.helper) this.helper.update();
+                
+                // 必须手动更新
+                this.controls.update();
                 this.viewer.update();
                 this.viewer.render();
             }
