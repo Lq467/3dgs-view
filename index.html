@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>3DGS 必胜运行版</title>
+    <title>3DGS 终极通关版</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
         
@@ -21,7 +21,7 @@
             z-index: 1000;
         }
     </style>
-    <!-- 使用 v0.4.7 引擎 -->
+    <!-- 引用 v0.4.7 引擎 -->
     <script type="importmap">
     {
         "imports": {
@@ -34,14 +34,14 @@
 </head>
 <body>
 
-    <div id="status-bar">准备开始...</div>
+    <div id="status-bar">准备就绪...</div>
     <button id="start-btn">开启陀螺仪</button>
 
     <script type="module">
         import * as THREE from 'three';
         import { Viewer } from '@mkkellogg/gaussian-splats-3d';
 
-        // ✅ 这是你刚才测试成功的链接
+        // 你的 HF 直链
         const MODEL_URL = 'https://huggingface.co/datasets/liu1230/my-3dgs/resolve/main/scene.splat';
 
         const status = document.getElementById('status-bar');
@@ -50,12 +50,10 @@
         let isRunning = false;
         let initialGyro = null;
         
-        // 陀螺仪限制
         const CLAMP_X = 0.5; 
         const CLAMP_Y = 0.6; 
 
         async function main() {
-            // 1. 初始化引擎
             viewer = new Viewer({
                 'cameraUp': [0, 1, 0],
                 'initialCameraPosition': [0, 1, 4],
@@ -64,19 +62,14 @@
             });
             document.body.appendChild(viewer.renderer.domElement);
 
-            // ============================================
-            // 🚀 核心修改：手动下载，绕过引擎的Bug
-            // ============================================
             try {
-                status.innerText = "🚀 第一步：正在手动下载文件...";
-                
-                // 使用 fetch 下载（这步刚才证明是能通的）
+                // 1. 手动下载
+                status.innerText = "🚀 正在下载模型数据...";
                 const response = await fetch(MODEL_URL);
                 if (!response.ok) throw new Error("下载失败: " + response.status);
 
-                // 读取数据流
                 const reader = response.body.getReader();
-                const contentLength = +response.headers.get('Content-Length'); // 尝试获取总长度
+                const contentLength = +response.headers.get('Content-Length');
                 let receivedLength = 0; 
                 let chunks = []; 
 
@@ -86,41 +79,30 @@
                     chunks.push(value);
                     receivedLength += value.length;
                     
-                    // 计算下载进度
-                    let progress = "下载中";
-                    if (contentLength) {
-                        progress = Math.round((receivedLength / contentLength) * 100) + "%";
-                    } else {
-                        progress = (receivedLength / 1024 / 1024).toFixed(1) + " MB";
-                    }
-                    status.innerText = `📥 正在下载... ${progress}`;
+                    let progress = contentLength ? Math.round((receivedLength / contentLength) * 100) + "%" : (receivedLength / 1024 / 1024).toFixed(1) + " MB";
+                    status.innerText = `📥 下载中... ${progress}`;
                 }
 
-                status.innerText = "⚙️ 下载完成，正在组装数据...";
+                status.innerText = "⚙️ 正在处理数据...";
                 
-                // 把下载好的碎片拼成一个完整的 Blob
+                // 2. 核心修改：将数据封装成一个【真】文件对象
                 const blob = new Blob(chunks);
-                // 生成一个本地的临时链接 (blob:http://....)
-                const localUrl = URL.createObjectURL(blob);
+                // 👇 这一步是骗过引擎的关键！我们造了一个假文件，名字叫 model.splat
+                const file = new File([blob], "model.splat");
 
-                status.innerText = "🎬 启动渲染引擎...";
+                status.innerText = "🎬 引擎加载中...";
 
-                // 把这个本地链接喂给引擎，并强制告诉它这是 splat
-                await viewer.addSplatScene(localUrl, {
+                // 3. 把文件喂给引擎 (引擎支持直接读取 File 对象)
+                await viewer.addSplatScene(file, {
                     'showLoadingUI': false,
-                    'format': 'splat', // 强制指定格式
                     'splatAlphaRemovalThreshold': 5, 
                     'scale': [1, 1, 1],
                     'rotation': [0, 0, 0, 1]
                 });
 
-                // 成功！
                 status.innerText = "✅ 加载成功！";
                 status.style.color = "#fff";
                 btn.style.display = "block";
-                
-                // 释放内存
-                URL.revokeObjectURL(localUrl);
 
             } catch (err) {
                 console.error(err);
@@ -129,7 +111,6 @@
             }
         }
 
-        // 按钮点击
         btn.addEventListener('click', () => {
             btn.style.display = 'none';
             status.style.display = 'none';
