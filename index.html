@@ -3,41 +3,57 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>3DGS 终极修复版</title>
+    <title>3DGS 触摸交互版 (类SuperSplat)</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
+        body { margin: 0; overflow: hidden; background-color: #111; font-family: sans-serif; }
         
+        /* 顶部加载提示 */
         #status-bar {
             position: absolute; top: 0; left: 0; width: 100%; 
-            padding: 10px; background: rgba(0,0,0,0.6); 
+            padding: 10px; background: rgba(0,0,0,0.8); 
             color: #0f0; text-align: center; font-size: 14px; 
             z-index: 999; pointer-events: none;
         }
 
-        #ui-panel {
-            position: absolute; bottom: 0; left: 0; width: 100%;
-            background: rgba(0,0,0,0.85); padding: 15px; box-sizing: border-box;
-            display: flex; flex-direction: column; gap: 10px;
-            z-index: 1000;
+        /* 底部控制面板 */
+        #controls-panel {
+            position: absolute; bottom: 0; left: 0; width: 100%; height: 35%;
+            background: rgba(30,30,30,0.9); 
+            border-top: 1px solid #444;
+            display: flex; flex-direction: column;
+            z-index: 1000; transition: transform 0.3s;
         }
 
+        /* 面板标题栏 */
+        .panel-header {
+            padding: 10px; background: #333; color: white; 
+            font-size: 14px; display: flex; justify-content: space-between;
+            cursor: pointer; user-select: none;
+        }
+        
+        /* 滚动区域 */
+        .scroll-area {
+            flex: 1; overflow-y: auto; padding: 15px;
+        }
+
+        /* 控制组 */
+        .control-group { margin-bottom: 15px; border-bottom: 1px solid #444; padding-bottom: 10px; }
+        .control-title { color: #aaa; font-size: 12px; margin-bottom: 8px; font-weight: bold; }
+        
+        /* 滑杆样式 */
         .slider-row {
-            display: flex; align-items: center; justify-content: space-between;
-            color: white; font-size: 14px;
+            display: flex; align-items: center; margin-bottom: 8px;
         }
-        .slider-row label { width: 50px; }
-        .slider-row input { flex: 1; margin: 0 10px; }
-        .slider-row span { width: 30px; text-align: right; color: #aaa; }
+        .slider-label { color: white; width: 20px; font-size: 12px; }
+        input[type=range] { flex: 1; margin: 0 10px; cursor: pointer; }
+        .slider-val { color: #0f0; width: 40px; font-size: 12px; text-align: right; }
 
-        .btn-row { display: flex; justify-content: center; margin-top: 5px; }
-
-        #gyro-btn {
-            padding: 12px 30px; font-size: 16px; border-radius: 25px; border: none;
-            background: #eee; color: #333; font-weight: bold; cursor: pointer;
-            box-shadow: 0 0 10px rgba(255,255,255,0.2);
-        }
-        #gyro-btn.active {
-            background: #0f0; color: black; box-shadow: 0 0 15px #0f0;
+        /* 重置按钮 */
+        #reset-cam {
+            position: absolute; top: 20px; right: 20px;
+            background: white; border: none; padding: 8px 15px;
+            border-radius: 20px; cursor: pointer; z-index: 900;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5); font-weight: bold;
         }
     </style>
     
@@ -55,23 +71,63 @@
 <body>
 
     <div id="status-bar">准备加载...</div>
+    
+    <!-- 重置相机按钮 -->
+    <button id="reset-cam">🔄 重置视角</button>
 
-    <div id="ui-panel" style="display:none">
-        <!-- 距离滑杆：看不到模型就往右拉！ -->
-        <div class="slider-row">
-            <label>距离</label>
-            <input type="range" id="cam-dist" min="1" max="100" step="1" value="5">
-            <span id="dist-val">5</span>
+    <!-- 控制面板 -->
+    <div id="controls-panel">
+        <div class="panel-header" id="toggle-panel">
+            <span>🎛️ 模型变换 (调整模型位置/大小)</span>
+            <span>⬇️</span>
         </div>
-        <!-- 缩放滑杆：控制模型大小 -->
-        <div class="slider-row">
-            <label>缩放</label>
-            <input type="range" id="model-scale" min="0.1" max="5" step="0.1" value="1">
-            <span id="scale-val">1.0</span>
-        </div>
-        
-        <div class="btn-row">
-            <button id="gyro-btn">🧭 开启陀螺仪</button>
+        <div class="scroll-area">
+            
+            <!-- 缩放控制 -->
+            <div class="control-group">
+                <div class="control-title">缩放 (Scale) - 这里的缩放一定管用</div>
+                <div class="slider-row">
+                    <span class="slider-label">S</span>
+                    <input type="range" id="scale" min="0.1" max="5.0" step="0.1" value="1.0">
+                    <span class="slider-val" id="val-scale">1.0</span>
+                </div>
+            </div>
+
+            <!-- 旋转控制 -->
+            <div class="control-group">
+                <div class="control-title">旋转 (Rotation) - 摆正模型</div>
+                <div class="slider-row">
+                    <span class="slider-label">X</span>
+                    <input type="range" class="rot-slider" data-axis="x" min="-180" max="180" value="0">
+                    <span class="slider-val" id="val-rot-x">0°</span>
+                </div>
+                <div class="slider-row">
+                    <span class="slider-label">Y</span>
+                    <input type="range" class="rot-slider" data-axis="y" min="-180" max="180" value="0">
+                    <span class="slider-val" id="val-rot-y">0°</span>
+                </div>
+                <div class="slider-row">
+                    <span class="slider-label">Z</span>
+                    <input type="range" class="rot-slider" data-axis="z" min="-180" max="180" value="0">
+                    <span class="slider-val" id="val-rot-z">0°</span>
+                </div>
+            </div>
+
+            <!-- 位置控制 -->
+            <div class="control-group" style="border:none">
+                <div class="control-title">位移 (Position) - 把它挪到屏幕中间</div>
+                <div class="slider-row">
+                    <span class="slider-label">X</span>
+                    <input type="range" class="pos-slider" data-axis="x" min="-10" max="10" step="0.1" value="0">
+                    <span class="slider-val" id="val-pos-x">0</span>
+                </div>
+                <div class="slider-row">
+                    <span class="slider-label">Y</span>
+                    <input type="range" class="pos-slider" data-axis="y" min="-10" max="10" step="0.1" value="0">
+                    <span class="slider-val" id="val-pos-y">0</span>
+                </div>
+            </div>
+
         </div>
     </div>
 
@@ -83,34 +139,32 @@
         const MODEL_URL = 'https://huggingface.co/datasets/liu1230/my-3dgs/resolve/main/scene.splat';
 
         const status = document.getElementById('status-bar');
-        const uiPanel = document.getElementById('ui-panel');
-        const gyroBtn = document.getElementById('gyro-btn');
-        
-        const distSlider = document.getElementById('cam-dist');
-        const scaleSlider = document.getElementById('model-scale');
-        const distVal = document.getElementById('dist-val');
-        const scaleVal = document.getElementById('scale-val');
-
+        const resetBtn = document.getElementById('reset-cam');
         let viewer;
-        let splatScene; 
-        let isGyroActive = false;
-        let initialGyro = null;
-        
-        const CLAMP_X = 0.6; 
-        const CLAMP_Y = 0.8; 
+        let splatMesh = null; // 存储真正的模型网格
+
+        // 变换参数
+        let params = {
+            scale: 1.0,
+            rot: { x: 0, y: 0, z: 0 },
+            pos: { x: 0, y: 0, z: 0 }
+        };
 
         async function main() {
+            // 1. 初始化引擎
             viewer = new Viewer({
                 'cameraUp': [0, 1, 0],
+                // 相机位置：往后拉(Z=5)，稍微抬高(Y=1)
                 'initialCameraPosition': [0, 1, 5], 
                 'initialCameraLookAt': [0, 0, 0],
+                // 🟢 关键：启用内置控制器，实现平滑触摸
                 'useBuiltInControls': true, 
                 'sharedMemoryForWorkers': false,
             });
             document.body.appendChild(viewer.renderer.domElement);
 
             try {
-                // 1. 手动下载
+                // 2. 下载数据
                 status.innerText = "🚀 正在下载...";
                 const response = await fetch(MODEL_URL);
                 if (!response.ok) throw new Error("下载失败: " + response.status);
@@ -130,30 +184,37 @@
                     status.innerText = `📥 下载中... ${progress}`;
                 }
 
-                status.innerText = "⚙️ 处理数据...";
+                status.innerText = "⚙️ 处理模型...";
                 const blob = new Blob(chunks);
                 const originalUrl = URL.createObjectURL(blob);
-                
-                // 2. 后缀欺骗
-                const fakeUrl = originalUrl + '#.splat';
+                const fakeUrl = originalUrl + '#.splat'; // 后缀欺骗
 
-                // 3. 加载场景 (不接收返回值)
+                // 3. 加载场景
                 await viewer.addSplatScene(fakeUrl, {
                     'showLoadingUI': false,
                     'splatAlphaRemovalThreshold': 2, 
                 });
-                
-                // 🔴 核心修复：直接通过 viewer 获取刚才加载的场景
-                splatScene = viewer.getSplatScene(0);
 
-                if (!splatScene) {
-                    console.warn("未获取到场景对象，缩放功能可能失效");
+                // 🟢 终极修正：遍历场景图，找到真正的 SplatMesh
+                // 之前的 getSplatScene(0) 可能返回的是包装器，缩放不生效
+                // 这次我们暴力搜索！
+                viewer.scene.traverse((child) => {
+                    // SplatMesh 通常有特殊的属性，或者它就是那个唯一的 Mesh
+                    if (child.isMesh || child.constructor.name.includes('Splat')) {
+                        splatMesh = child;
+                    }
+                });
+                
+                // 如果没找到，就拿第一个子对象当替补
+                if (!splatMesh) {
+                    splatMesh = viewer.getSplatScene(0);
                 }
 
-                status.innerText = "✅ 加载成功！";
+                console.log("找到模型对象:", splatMesh);
+
+                status.innerText = "✅ 加载成功！请使用下方滑杆调整模型";
                 setTimeout(() => { status.style.display = 'none'; }, 2000);
                 
-                uiPanel.style.display = 'block';
                 viewer.start();
 
             } catch (err) {
@@ -163,76 +224,81 @@
             }
         }
 
-        // ================= 交互逻辑 =================
+        // ================= 模型变换逻辑 =================
         
-        distSlider.addEventListener('input', (e) => {
-            const val = parseFloat(e.target.value);
-            distVal.innerText = val;
-            viewer.camera.position.z = val;
+        function updateTransform() {
+            if (!splatMesh) return;
+
+            // 应用缩放
+            splatMesh.scale.set(params.scale, params.scale, params.scale);
+
+            // 应用旋转 (转为弧度)
+            splatMesh.rotation.set(
+                THREE.MathUtils.degToRad(params.rot.x),
+                THREE.MathUtils.degToRad(params.rot.y),
+                THREE.MathUtils.degToRad(params.rot.z)
+            );
+
+            // 应用位移
+            splatMesh.position.set(params.pos.x, params.pos.y, params.pos.z);
+        }
+
+        // 监听缩放
+        document.getElementById('scale').addEventListener('input', (e) => {
+            params.scale = parseFloat(e.target.value);
+            document.getElementById('val-scale').innerText = params.scale;
+            updateTransform();
+        });
+
+        // 监听旋转 (X, Y, Z)
+        document.querySelectorAll('.rot-slider').forEach(el => {
+            el.addEventListener('input', (e) => {
+                const axis = e.target.dataset.axis;
+                const val = parseFloat(e.target.value);
+                params.rot[axis] = val;
+                document.getElementById(`val-rot-${axis}`).innerText = val + "°";
+                updateTransform();
+            });
+        });
+
+        // 监听位移 (X, Y)
+        document.querySelectorAll('.pos-slider').forEach(el => {
+            el.addEventListener('input', (e) => {
+                const axis = e.target.dataset.axis;
+                const val = parseFloat(e.target.value);
+                params.pos[axis] = val;
+                document.getElementById(`val-pos-${axis}`).innerText = val;
+                updateTransform();
+            });
+        });
+
+        // ================= 交互功能 =================
+
+        // 重置相机按钮
+        resetBtn.addEventListener('click', () => {
+            viewer.camera.position.set(0, 1, 5);
             viewer.camera.lookAt(0, 0, 0);
-            if (viewer.controls) viewer.controls.update();
+            if (viewer.controls) {
+                viewer.controls.target.set(0, 0, 0);
+                viewer.controls.update();
+            }
         });
 
-        scaleSlider.addEventListener('input', (e) => {
-            if (!splatScene) return;
-            const val = parseFloat(e.target.value);
-            scaleVal.innerText = val;
-            splatScene.scale.set(val, val, val);
-        });
-
-        gyroBtn.addEventListener('click', () => {
-            if (!isGyroActive) {
-                requestGyro();
+        // 折叠面板
+        const panel = document.getElementById('controls-panel');
+        const header = document.getElementById('toggle-panel');
+        let isExpanded = true;
+        
+        header.addEventListener('click', () => {
+            isExpanded = !isExpanded;
+            if (isExpanded) {
+                panel.style.transform = "translateY(0)";
+                header.querySelector('span:last-child').innerText = "⬇️";
             } else {
-                isGyroActive = false;
-                gyroBtn.classList.remove('active');
-                gyroBtn.innerText = "🧭 开启陀螺仪";
-                if (viewer.controls) viewer.controls.enabled = true;
-                window.removeEventListener('deviceorientation', handleOrientation);
+                panel.style.transform = "translateY(calc(100% - 40px))"; // 只留标题
+                header.querySelector('span:last-child').innerText = "⬆️";
             }
         });
-
-        function requestGyro() {
-            if (typeof DeviceOrientationEvent !== 'undefined' && 
-                typeof DeviceOrientationEvent.requestPermission === 'function') {
-                DeviceOrientationEvent.requestPermission()
-                    .then(response => {
-                        if (response === 'granted') {
-                            activateGyro();
-                        } else {
-                            alert('需要授权才能使用陀螺仪');
-                        }
-                    }).catch(console.error);
-            } else {
-                activateGyro();
-            }
-        }
-
-        function activateGyro() {
-            isGyroActive = true;
-            initialGyro = null;
-            gyroBtn.classList.add('active');
-            gyroBtn.innerText = "🛑 关闭陀螺仪";
-            if (viewer.controls) viewer.controls.enabled = false;
-            window.addEventListener('deviceorientation', handleOrientation);
-        }
-
-        function handleOrientation(event) {
-            if (!viewer || !isGyroActive) return;
-            if (!initialGyro && event.alpha !== null) {
-                initialGyro = { beta: event.beta, gamma: event.gamma };
-                return;
-            }
-            if (!initialGyro) return;
-
-            let deltaX = (event.beta - initialGyro.beta) * (Math.PI / 180);
-            let deltaY = (event.gamma - initialGyro.gamma) * (Math.PI / 180);
-            deltaX = Math.max(-CLAMP_X, Math.min(CLAMP_X, deltaX));
-            deltaY = Math.max(-CLAMP_Y, Math.min(CLAMP_Y, deltaY));
-
-            viewer.camera.rotation.set(deltaX, deltaY, 0, 'YXZ');
-            viewer.update();
-        }
 
         main();
     </script>
