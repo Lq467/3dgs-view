@@ -3,52 +3,46 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3DGS SuperEditor (Box Mode)</title>
+    <title>3DGS 实体代理操作版</title>
     <style>
-        /* 全局设定 */
         body, html {
             width: 100%; height: 100%; margin: 0; padding: 0;
-            overflow: hidden; background-color: #111;
-            touch-action: none; /* 禁止系统手势 */
-            font-family: sans-serif; user-select: none;
+            overflow: hidden; background-color: #000;
+            touch-action: none; font-family: sans-serif; user-select: none;
         }
 
-        /* 顶部状态条 */
-        #top-bar {
-            position: absolute; top: 0; left: 0; width: 100%;
-            padding: 10px; background: rgba(20,20,20,0.9); border-bottom: 1px solid #333;
-            color: #888; font-size: 14px; text-align: center; z-index: 1000;
-            display: flex; justify-content: space-between; align-items: center; box-sizing: border-box;
+        /* 顶部提示 */
+        #top-msg {
+            position: absolute; top: 10px; left: 0; width: 100%; text-align: center;
+            pointer-events: none; z-index: 1000;
         }
-        #status-text { font-weight: bold; color: #00ff88; }
-        
-        /* 底部工具栏 */
+        .msg-box {
+            background: rgba(255, 0, 0, 0.8); color: white; padding: 8px 15px;
+            border-radius: 20px; font-size: 14px; font-weight: bold; display: inline-block;
+        }
+
+        /* 底部操作区 */
         #dock {
             position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
-            background: #222; padding: 8px; border-radius: 16px;
-            display: flex; gap: 10px; border: 1px solid #444; z-index: 1000;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            background: #222; padding: 10px; border-radius: 16px;
+            display: flex; gap: 15px; border: 1px solid #444; z-index: 1000;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.8);
         }
 
         .btn {
-            width: 50px; height: 50px; background: #333; border: 1px solid #444;
-            border-radius: 12px; color: #aaa; font-size: 20px;
+            width: 55px; height: 55px; background: #333; border: 1px solid #555;
+            border-radius: 12px; color: #aaa; font-size: 24px;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
         }
         .btn span { font-size: 10px; margin-top: 2px; }
+        .btn.active { background: #007bff; color: white; border-color: #00aaff; }
 
-        /* 激活样式 */
-        .btn.active { background: #007bff; color: white; border-color: #0056b3; }
-        .btn.active.mode-view { background: #00ff88; color: #000; }
-        
-        /* 加载遮罩 */
+        /* 加载动画 */
         #loader {
-            position: absolute; top:0; left:0; width:100%; height:100%;
-            background:#111; z-index:5000; display:flex; flex-direction:column;
-            align-items:center; justify-content:center;
+            position: absolute; top:0; left:0; width:100%; height:100%; background:#000;
+            display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:9999;
         }
-        .bar-box { width:200px; height:4px; background:#333; margin-top:15px; border-radius:2px; }
-        .bar-fill { width:0%; height:100%; background:#00ff88; transition:width 0.1s; }
+        .loader-text { color: #0f0; margin-top: 20px; font-family: monospace; }
     </style>
 
     <script type="importmap">
@@ -64,28 +58,26 @@
 <body>
 
     <div id="loader">
-        <div style="color:white; font-weight:bold;">正在加载编辑器资源...</div>
-        <div class="bar-box"><div class="bar-fill" id="progress"></div></div>
-        <div style="color:#666; font-size:12px; margin-top:10px;" id="p-text">0%</div>
+        <div style="font-size: 40px;">📦</div>
+        <div class="loader-text" id="load-text">正在构建实体容器...</div>
     </div>
 
-    <div id="top-bar">
-        <div id="status-text">初始化中...</div>
-        <button onclick="app.resetCamera()" style="background:#444; color:white; border:none; padding:5px 10px; border-radius:4px;">重置视角</button>
+    <div id="top-msg">
+        <div class="msg-box" id="status-label">请操作红色的盒子</div>
     </div>
 
     <div id="dock">
-        <button class="btn active mode-view" id="b-view" onclick="app.setMode('view')">
+        <button class="btn active" id="btn-view" onclick="app.setMode('view')">
             👁️<span>浏览</span>
         </button>
-        <div style="width:1px; background:#444; margin:0 5px;"></div>
-        <button class="btn" id="b-translate" onclick="app.setMode('translate')">
+        <div style="width:1px; background:#555;"></div>
+        <button class="btn" id="btn-translate" onclick="app.setMode('translate')">
             ✢<span>移动</span>
         </button>
-        <button class="btn" id="b-rotate" onclick="app.setMode('rotate')">
+        <button class="btn" id="btn-rotate" onclick="app.setMode('rotate')">
             ↻<span>旋转</span>
         </button>
-        <button class="btn" id="b-scale" onclick="app.setMode('scale')">
+        <button class="btn" id="btn-scale" onclick="app.setMode('scale')">
             ⤢<span>缩放</span>
         </button>
     </div>
@@ -96,48 +88,57 @@
         import { TransformControls } from 'three/addons/controls/TransformControls.js';
         import { Viewer } from '@mkkellogg/gaussian-splats-3d';
 
-        // 你的模型
         const MODEL_URL = 'https://huggingface.co/datasets/liu1230/my-3dgs/resolve/main/scene.splat';
 
         class App {
             constructor() {
                 this.viewer = null;
-                this.orbit = null;
+                this.controls = null;
                 this.gizmo = null;
-                this.container = null; // 这是一个 Group，用来装 Splat
-                this.helper = null;    // 黄色的包围盒
+                
+                // 核心：这是一个实体的 BoxMesh，用来代替点云被点击
+                this.proxyBox = null; 
+                this.splatMesh = null;
             }
 
             async init() {
                 // 1. 初始化引擎
                 this.viewer = new Viewer({
                     'cameraUp': [0, 1, 0],
-                    'initialCameraPosition': [0, 1, 5],
+                    'initialCameraPosition': [0, 2, 5],
                     'initialCameraLookAt': [0, 0, 0],
-                    'useBuiltInControls': false, // 🚫 必须关闭
-                    'selfDrivenMode': false,     // 手动驱动
+                    'useBuiltInControls': false, 
+                    'selfDrivenMode': false,
                     'sharedMemoryForWorkers': false
                 });
+                
+                document.body.appendChild(this.viewer.renderer.domElement);
 
-                const canvas = this.viewer.renderer.domElement;
-                document.body.appendChild(canvas);
+                // 2. 创建一个“实体代理盒” (Proxy Box)
+                // 这是一个看得见、摸得着的红色半透明方块
+                const geometry = new THREE.BoxGeometry(2, 2, 2);
+                const material = new THREE.MeshBasicMaterial({ 
+                    color: 0xff0000, 
+                    wireframe: true,  // 线框模式，方便看里面的模型
+                    transparent: true, 
+                    opacity: 0.5,
+                    depthTest: false  // 保证永远显示在最前面
+                });
+                
+                this.proxyBox = new THREE.Mesh(geometry, material);
+                this.proxyBox.visible = false; // 初始隐藏，编辑模式才显示
+                this.viewer.threeScene.add(this.proxyBox);
 
-                // 2. 创建一个容器 Group
-                // 我们不直接控制 Splat，而是控制这个 Group
-                this.container = new THREE.Group();
-                this.viewer.threeScene.add(this.container);
-
-                // 3. OrbitControls (视角)
-                this.orbit = new OrbitControls(this.viewer.camera, canvas);
-                this.orbit.enableDamping = true;
-                this.orbit.dampingFactor = 0.05;
+                // 3. OrbitControls (相机)
+                this.controls = new OrbitControls(this.viewer.camera, this.viewer.renderer.domElement);
+                this.controls.enableDamping = true;
                 
                 // 4. TransformControls (坐标轴)
-                this.gizmo = new TransformControls(this.viewer.camera, canvas);
-                this.gizmo.setSize(1.2); 
-                // 强制坐标轴在最上层
-                this.gizmo.traverse(c => {
-                    if(c.material) { c.material.depthTest = false; c.renderOrder = 9999; }
+                this.gizmo = new TransformControls(this.viewer.camera, this.viewer.renderer.domElement);
+                this.gizmo.setSize(1.2);
+                // 解决冲突：拖动坐标轴时，禁止相机转动
+                this.gizmo.addEventListener('dragging-changed', (e) => {
+                    this.controls.enabled = !e.value;
                 });
                 this.viewer.threeScene.add(this.gizmo);
 
@@ -149,102 +150,69 @@
             }
 
             async loadModel() {
-                const pBar = document.getElementById('progress');
-                const pText = document.getElementById('p-text');
-
-                // 下载
-                const resp = await fetch(MODEL_URL);
-                const len = +resp.headers.get('Content-Length');
-                const reader = resp.body.getReader();
-                let received = 0;
-                let chunks = [];
-
-                while(true) {
-                    const {done, value} = await reader.read();
-                    if(done) break;
-                    chunks.push(value);
-                    received += value.length;
-                    if(len) {
-                        const pct = Math.round((received/len)*100);
-                        pBar.style.width = pct + "%";
-                        pText.innerText = pct + "%";
-                    }
-                }
+                const txt = document.getElementById('load-text');
+                txt.innerText = "下载模型数据...";
                 
-                // 加载
-                const blob = new Blob(chunks);
+                const resp = await fetch(MODEL_URL);
+                const blob = await resp.blob();
                 const url = URL.createObjectURL(blob) + '#.splat';
+                
+                txt.innerText = "注入代理容器...";
                 await this.viewer.addSplatScene(url, { 'showLoadingUI': false });
 
-                // ⚠️ 关键操作：获取模型并放入容器
                 setTimeout(() => {
-                    const splat = this.viewer.getSplatScene(0);
-                    if (splat) {
-                        this.container.add(splat);
+                    this.splatMesh = this.viewer.getSplatScene(0);
+                    if (this.splatMesh) {
+                        // ⚠️ 终极操作：把 Splat 模型塞进 ProxyBox 里
+                        // 这样 ProxyBox 动，Splat 必须动！
+                        this.proxyBox.add(this.splatMesh);
                         
-                        // 添加一个黄色的包围盒，让你知道模型在哪里
-                        this.helper = new THREE.BoxHelper(this.container, 0xffff00);
-                        this.viewer.threeScene.add(this.helper);
+                        // 调整一下 Splat 在盒子里的位置（通常居中）
+                        this.splatMesh.position.set(0, 0, 0);
                         
                         document.getElementById('loader').style.display = 'none';
                         this.setMode('view');
                     }
-                }, 200);
+                }, 500);
             }
 
             setMode(mode) {
-                // UI 更新
-                document.querySelectorAll('.btn').forEach(b => b.classList.remove('active', 'mode-view'));
-                const btn = document.getElementById(mode === 'view' ? 'b-view' : 'b-' + mode);
-                btn.classList.add('active');
-                if(mode === 'view') btn.classList.add('mode-view');
+                // UI
+                document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+                const btnId = mode === 'view' ? 'btn-view' : 'btn-' + mode;
+                document.getElementById(btnId).classList.add('active');
 
-                const status = document.getElementById('status-text');
+                const label = document.getElementById('status-label');
 
                 if (mode === 'view') {
                     // === 浏览模式 ===
-                    this.gizmo.detach();       // 移除坐标轴
-                    this.orbit.enabled = true; // ✅ 开启视角旋转
+                    this.gizmo.detach();
+                    this.proxyBox.visible = false; // 隐藏红盒子
+                    this.controls.enabled = true;  // 允许转视角
                     
-                    if(this.helper) this.helper.visible = false; // 隐藏包围盒
-                    
-                    status.innerText = "👀 浏览模式 (可以转动视角)";
-                    status.style.color = "#00ff88";
-
+                    label.innerText = "👀 浏览模式：转动视角";
+                    label.style.backgroundColor = "rgba(0,0,0,0.6)";
                 } else {
                     // === 编辑模式 ===
-                    if (this.container) {
-                        this.gizmo.attach(this.container); // 附着到容器
-                        this.gizmo.setMode(mode);
-                        
-                        if(this.helper) {
-                            this.helper.visible = true; // 显示包围盒
-                            this.helper.update();
-                        }
-                    }
-
-                    this.orbit.enabled = false; // ⛔️ 彻底锁死视角
+                    // 1. 显示红盒子 (实体!)
+                    this.proxyBox.visible = true; 
                     
-                    status.innerText = `🔧 ${mode}模式 (视角已锁，请拖动坐标轴)`;
-                    status.style.color = "#00aaff";
+                    // 2. 坐标轴附着在红盒子上 (而不是附着在虚无的点云上)
+                    this.gizmo.attach(this.proxyBox);
+                    this.gizmo.setMode(mode);
+                    
+                    // 3. 这里的 controls.enabled 不需要手动 false，
+                    // 因为我们上面绑定了 dragging-changed 事件。
+                    // 只要你点中了红盒子或坐标轴，相机就会停。
+                    
+                    label.innerText = `🔧 ${mode}模式：请拖动红色方框`;
+                    label.style.backgroundColor = "rgba(255,0,0,0.8)";
                 }
-            }
-
-            resetCamera() {
-                this.orbit.reset();
-                this.viewer.camera.position.set(0, 1, 5);
             }
 
             animate() {
                 requestAnimationFrame(() => this.animate());
-                
-                this.orbit.update();
-                
-                // 实时更新包围盒，让它跟着模型动
-                if (this.helper && this.container) {
-                    this.helper.update();
-                }
-
+                this.controls.update();
                 this.viewer.update();
                 this.viewer.render();
             }
