@@ -3,34 +3,91 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3DGS 终极暴力版</title>
+    <title>SuperSplat Mobile Ultra</title>
     <style>
-        /* 1. 强制全屏，禁止所有默认滚动 */
-        html, body {
+        /* --- 核心基础 --- */
+        body, html {
             width: 100%; height: 100%; margin: 0; padding: 0;
-            overflow: hidden; background-color: #000;
-            touch-action: none; /* 关键：禁止浏览器处理触摸 */
+            overflow: hidden; background-color: #0d0d0d; /* 深色背景 */
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            touch-action: none; /* 禁止浏览器默认滚动 */
+            user-select: none;  /* 禁止选中文本 */
         }
 
-        /* 2. 调试信息 */
-        #debug-info {
-            position: absolute; top: 10px; left: 10px; 
-            color: yellow; font-family: monospace; font-size: 12px;
-            background: rgba(0,0,0,0.5); padding: 5px; pointer-events: none;
-            z-index: 9999;
+        /* --- 加载条 --- */
+        #loader-container {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            text-align: center; pointer-events: none; z-index: 2000;
+            transition: opacity 0.5s;
         }
+        .spinner {
+            width: 40px; height: 40px; border: 4px solid rgba(255,255,255,0.1);
+            border-left-color: #00ff88; border-radius: 50%;
+            animation: spin 1s linear infinite; margin: 0 auto 15px;
+        }
+        .loading-text { color: #00ff88; font-size: 14px; font-weight: 500; letter-spacing: 1px; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
 
-        /* 3. 底部操作栏 */
-        #toolbar {
+        /* --- 顶部控制区 --- */
+        #top-bar {
+            position: absolute; top: 20px; left: 20px; right: 20px;
+            display: flex; justify-content: space-between; align-items: center;
+            z-index: 1000; pointer-events: none; /* 让中间部分可以穿透点击 */
+        }
+        .app-title {
+            color: rgba(255,255,255,0.5); font-weight: bold; font-size: 14px;
+            background: rgba(0,0,0,0.4); padding: 5px 10px; border-radius: 12px;
+            backdrop-filter: blur(5px);
+        }
+        .action-btn {
+            pointer-events: auto; /* 恢复按钮点击 */
+            background: rgba(40,40,40,0.8); border: 1px solid rgba(255,255,255,0.1);
+            color: white; padding: 8px 15px; border-radius: 20px;
+            font-size: 12px; cursor: pointer; backdrop-filter: blur(10px);
+            display: flex; align-items: center; gap: 5px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+        .action-btn:active { transform: scale(0.95); background: #333; }
+
+        /* --- 底部 Dock 栏 (核心交互) --- */
+        #dock-container {
             position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
-            display: flex; gap: 20px; z-index: 1000;
+            background: rgba(20, 20, 20, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.1);
+            padding: 8px; border-radius: 24px;
+            display: flex; gap: 8px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+            z-index: 1000;
         }
-        .btn {
-            width: 60px; height: 60px; border-radius: 50%; border: 2px solid #555;
-            background: rgba(50,50,50,0.8); color: white; font-size: 24px;
-            display: flex; align-items: center; justify-content: center;
+
+        .tool-btn {
+            width: 50px; height: 50px;
+            border-radius: 18px; border: none;
+            background: transparent; color: #888;
+            font-size: 20px; display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            cursor: pointer; position: relative;
+            transition: all 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
         }
-        .btn:active { background: #00ff88; color: black; }
+        .tool-btn span { font-size: 10px; margin-top: 2px; font-weight: 500; }
+        
+        /* 激活状态 */
+        .tool-btn.active { background: #333; color: white; transform: translateY(-2px); }
+        .tool-btn.active.view-mode { color: #00ff88; box-shadow: 0 4px 12px rgba(0,255,136,0.15); }
+        .tool-btn.active.edit-mode { color: #00aaff; box-shadow: 0 4px 12px rgba(0,170,255,0.15); }
+
+        /* 分割线 */
+        .divider { width: 1px; height: 30px; background: rgba(255,255,255,0.1); margin: 10px 4px; }
+
+        /* 状态提示 */
+        #toast {
+            position: absolute; top: 70px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.8); color: white; padding: 8px 16px;
+            border-radius: 20px; font-size: 13px; opacity: 0; pointer-events: none;
+            transition: opacity 0.3s; z-index: 2000; border: 1px solid #333;
+        }
+
     </style>
 
     <script type="importmap">
@@ -45,14 +102,40 @@
 </head>
 <body>
 
-    <div id="debug-info">
-        初始化中...<br>
-        如果是红块能动但模型不动，说明模型太小或太远。
+    <!-- 状态提示 -->
+    <div id="toast"></div>
+
+    <!-- 加载动画 -->
+    <div id="loader-container">
+        <div class="spinner"></div>
+        <div class="loading-text" id="loader-text">引擎启动中...</div>
     </div>
 
-    <div id="toolbar">
-        <div class="btn" id="btn-reset">🏠</div>
-        <div class="btn" id="btn-mode">👁️</div>
+    <!-- 顶部 -->
+    <div id="top-bar">
+        <div class="app-title">3DGS Viewer</div>
+        <button class="action-btn" id="btn-reset">
+            🔄 重置视角
+        </button>
+    </div>
+
+    <!-- 底部 Dock -->
+    <div id="dock-container">
+        <button class="tool-btn active view-mode" onclick="app.setMode('view')" id="btn-view">
+            👁️<span>浏览</span>
+        </button>
+        
+        <div class="divider"></div>
+
+        <button class="tool-btn" onclick="app.setMode('translate')" id="btn-translate">
+            ✢<span>移动</span>
+        </button>
+        <button class="tool-btn" onclick="app.setMode('rotate')" id="btn-rotate">
+            ↻<span>旋转</span>
+        </button>
+        <button class="tool-btn" onclick="app.setMode('scale')" id="btn-scale">
+            ⤢<span>缩放</span>
+        </button>
     </div>
 
     <script type="module">
@@ -61,155 +144,166 @@
         import { TransformControls } from 'three/addons/controls/TransformControls.js';
         import { Viewer } from '@mkkellogg/gaussian-splats-3d';
 
-        // 调试输出
-        const debugEl = document.getElementById('debug-info');
-        function log(msg) { debugEl.innerHTML = msg + '<br>' + debugEl.innerHTML; }
-        
-        // 捕获所有错误
-        window.onerror = (e) => log("❌ ERROR: " + e);
+        const MODEL_URL = 'https://huggingface.co/datasets/liu1230/my-3dgs/resolve/main/scene.splat';
 
-        // 全局变量
-        let viewer, controls, gizmo, splatMesh;
-        let testBox; // 测试用的红色方块
+        class App {
+            constructor() {
+                this.viewer = null;
+                this.controls = null;
+                this.gizmo = null;
+                this.splatMesh = null;
+                this.grid = null;
+                this.isLoading = true;
+            }
 
-        async function init() {
-            try {
-                log("1. 启动 Viewer...");
-                
-                // ⚠️ 核心配置：完全禁用内置控制，自驱动循环
-                viewer = new Viewer({
-                    'cameraUp': [0, 1, 0],
-                    'initialCameraPosition': [0, 2, 5],
-                    'initialCameraLookAt': [0, 0, 0],
-                    'useBuiltInControls': false, 
-                    'selfDrivenMode': false, // 关闭自带循环，我们手动通过 requestAnimationFrame 驱动
-                    'sharedMemoryForWorkers': false
-                });
+            async init() {
+                try {
+                    // 1. 初始化 Viewer (禁用内置控制，手动接管)
+                    this.viewer = new Viewer({
+                        'cameraUp': [0, 1, 0],
+                        'initialCameraPosition': [0, 1, 4],
+                        'initialCameraLookAt': [0, 0, 0],
+                        'useBuiltInControls': false, 
+                        'selfDrivenMode': false, // 必须 false，手动 render
+                        'sharedMemoryForWorkers': false
+                    });
 
-                // 强制 Canvas 样式
-                const canvas = viewer.renderer.domElement;
-                canvas.style.position = 'absolute';
-                canvas.style.top = '0';
-                canvas.style.left = '0';
-                canvas.style.width = '100%';
-                canvas.style.height = '100%';
-                canvas.style.zIndex = '1'; // 确保在底层
-                document.body.appendChild(canvas);
+                    document.body.appendChild(this.viewer.renderer.domElement);
 
-                // 2. 添加测试参照物 (红色方块)
-                log("2. 添加测试方块...");
-                const geometry = new THREE.BoxGeometry(1, 1, 1);
-                const material = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true });
-                testBox = new THREE.Mesh(geometry, material);
-                testBox.position.y = 0.5;
-                viewer.threeScene.add(testBox);
-                
-                // 添加网格
-                viewer.threeScene.add(new THREE.GridHelper(10, 10));
+                    // 2. 添加环境参考
+                    this.grid = new THREE.GridHelper(20, 20, 0x444444, 0x111111);
+                    this.grid.position.y = -1; // 地面下沉
+                    this.viewer.threeScene.add(this.grid);
 
-                // 3. 手动绑定 OrbitControls (绑定到 body 确保能抓到事件)
-                log("3. 绑定控制器到 document.body...");
-                controls = new OrbitControls(viewer.camera, document.body); // 👈 关键：绑定到 body
-                controls.enableDamping = true;
-                controls.dampingFactor = 0.05;
-                controls.minDistance = 0.1;
-                controls.maxDistance = 100;
+                    // 3. 核心：绑定 OrbitControls 到 document.body
+                    this.controls = new OrbitControls(this.viewer.camera, document.body);
+                    this.controls.enableDamping = true; // 惯性
+                    this.controls.dampingFactor = 0.05;
+                    this.controls.screenSpacePanning = true;
+                    this.controls.minDistance = 0.1;
+                    this.controls.maxDistance = 100;
 
-                // 4. 初始化 Gizmo
-                gizmo = new TransformControls(viewer.camera, canvas);
-                gizmo.setSize(1.2);
-                gizmo.addEventListener('dragging-changed', (e) => {
-                    controls.enabled = !e.value;
-                });
-                viewer.threeScene.add(gizmo);
+                    // 4. 初始化编辑工具 Gizmo
+                    this.gizmo = new TransformControls(this.viewer.camera, this.viewer.renderer.domElement);
+                    this.gizmo.setSize(1.2); // 放大方便触控
+                    // 当拖动 Gizmo 时，禁用 OrbitControls
+                    this.gizmo.addEventListener('dragging-changed', (e) => {
+                        this.controls.enabled = !e.value;
+                    });
+                    this.viewer.threeScene.add(this.gizmo);
 
-                // 5. 启动自定义渲染循环
-                log("4. 启动渲染循环...");
-                animate();
+                    // 5. 启动渲染循环
+                    this.animate();
 
-                // 6. 加载模型
-                log("5. 开始下载模型...");
-                const url = 'https://huggingface.co/datasets/liu1230/my-3dgs/resolve/main/scene.splat';
-                
-                // 使用 fetch 下载
-                const response = await fetch(url);
-                const blob = await response.blob();
-                const objectURL = URL.createObjectURL(blob) + '#.splat';
-                
-                log("6. 解析模型数据...");
-                await viewer.addSplatScene(objectURL, { 'showLoadingUI': false });
-                
-                splatMesh = viewer.getSplatScene(0);
-                if (splatMesh) {
-                    log("✅ 模型加载成功！");
-                    // 自动缩放模型稍微大一点，防止太小看不见
-                    splatMesh.scale.set(1, 1, 1);
-                    splatMesh.position.set(0, 0, 0);
-                    
-                    // 默认附着 gizmo
-                    gizmo.attach(splatMesh);
-                    gizmo.setMode('translate'); // 默认移动模式
-                } else {
-                    log("⚠️ 未检测到模型对象");
+                    // 6. 加载模型
+                    await this.loadModel();
+
+                } catch (e) {
+                    alert("错误: " + e.message);
                 }
+            }
 
-            } catch (err) {
-                log("❌ 初始化崩溃: " + err.message);
+            async loadModel() {
+                const text = document.getElementById('loader-text');
+                text.innerText = "正在下载模型...";
+
+                // 使用 fetch 监控进度
+                const response = await fetch(MODEL_URL);
+                const reader = response.body.getReader();
+                const contentLength = +response.headers.get('Content-Length');
+                let receivedLength = 0;
+                let chunks = [];
+
+                while(true) {
+                    const {done, value} = await reader.read();
+                    if (done) break;
+                    chunks.push(value);
+                    receivedLength += value.length;
+                    if(contentLength) {
+                        text.innerText = `下载中 ${Math.round((receivedLength/contentLength)*100)}%`;
+                    }
+                }
+                
+                text.innerText = "解析渲染中...";
+                const blob = new Blob(chunks);
+                const url = URL.createObjectURL(blob) + '#.splat';
+
+                await this.viewer.addSplatScene(url, { 
+                    'showLoadingUI': false,
+                    'splatAlphaRemovalThreshold': 5
+                });
+
+                this.splatMesh = this.viewer.getSplatScene(0);
+                
+                // 隐藏加载动画
+                document.getElementById('loader-container').style.opacity = 0;
+                setTimeout(() => document.getElementById('loader-container').style.display = 'none', 500);
+
+                if (this.splatMesh) {
+                    this.showToast("✅ 模型加载成功");
+                    this.setMode('view');
+                }
+            }
+
+            setMode(mode) {
+                // UI 更新
+                document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+                
+                if (mode === 'view') {
+                    document.getElementById('btn-view').classList.add('active');
+                    this.gizmo.detach();
+                    this.controls.enabled = true;
+                    this.showToast("👀 浏览模式：单指旋转，双指缩放");
+                } else {
+                    const btnId = mode === 'translate' ? 'btn-translate' : 
+                                  mode === 'rotate' ? 'btn-rotate' : 'btn-scale';
+                    document.getElementById(btnId).classList.add('active');
+                    
+                    if (this.splatMesh) {
+                        this.gizmo.attach(this.splatMesh);
+                        this.gizmo.setMode(mode);
+                        this.showToast("🔧 编辑模式：拖动轴线调整模型");
+                    }
+                }
+            }
+
+            resetView() {
+                this.controls.reset();
+                this.viewer.camera.position.set(0, 1, 4);
+                this.viewer.camera.lookAt(0, 0, 0);
+                if(this.splatMesh) {
+                    // 可选：重置模型位置
+                    // this.splatMesh.position.set(0,0,0);
+                    // this.splatMesh.rotation.set(0,0,0);
+                    // this.splatMesh.scale.set(1,1,1);
+                }
+                this.showToast("📷 视角已重置");
+            }
+
+            showToast(msg) {
+                const t = document.getElementById('toast');
+                t.innerText = msg;
+                t.style.opacity = 1;
+                clearTimeout(this.toastTimer);
+                this.toastTimer = setTimeout(() => t.style.opacity = 0, 3000);
+            }
+
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                
+                // 必须手动更新
+                this.controls.update();
+                this.viewer.update();
+                this.viewer.render();
             }
         }
-
-        // 自定义渲染循环 (强力驱动)
-        function animate() {
-            requestAnimationFrame(animate);
-            
-            // 1. 让测试方块转起来 (证明画面是活的)
-            if (testBox) {
-                testBox.rotation.y += 0.01;
-                testBox.rotation.x += 0.005;
-            }
-
-            // 2. 更新控制器
-            if (controls) controls.update();
-
-            // 3. 强制 Viewer 渲染
-            // 注意：gaussian-splats-3d 的 update() 需要手动调用
-            if (viewer) {
-                viewer.update(); 
-                viewer.render(); 
-            }
-        }
-
-        // 按钮交互
-        document.getElementById('btn-reset').addEventListener('click', () => {
-            controls.reset();
-            if (splatMesh) {
-                splatMesh.position.set(0,0,0);
-                splatMesh.rotation.set(0,0,0);
-                splatMesh.scale.set(1,1,1);
-            }
-            log("位置已重置");
-        });
-
-        let modeIndex = 0;
-        const modes = ['translate', 'rotate', 'scale', 'view'];
-        document.getElementById('btn-mode').addEventListener('click', () => {
-            modeIndex = (modeIndex + 1) % modes.length;
-            const mode = modes[modeIndex];
-            log("切换模式: " + mode);
-            
-            if (mode === 'view') {
-                gizmo.detach();
-                controls.enabled = true;
-                document.getElementById('btn-mode').innerText = '👁️';
-            } else {
-                if(splatMesh) gizmo.attach(splatMesh);
-                gizmo.setMode(mode);
-                document.getElementById('btn-mode').innerText = mode === 'translate' ? '✢' : (mode === 'rotate' ? '↻' : '⤢');
-            }
-        });
 
         // 启动
-        init();
+        window.app = new App();
+        window.app.init();
+        
+        // 绑定重置按钮
+        document.getElementById('btn-reset').addEventListener('click', () => window.app.resetView());
 
     </script>
 </body>
