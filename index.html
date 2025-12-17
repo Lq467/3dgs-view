@@ -136,13 +136,14 @@
     <script type="module">
         import * as THREE from 'three';
         import { TransformControls } from 'three/addons/controls/TransformControls.js';
+        import { OrbitControls } from 'https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js';
         import { Viewer } from '@mkkellogg/gaussian-splats-3d';
 
         // 你的模型链接
         const MODEL_URL = 'https://huggingface.co/datasets/liu1230/my-3dgs/resolve/main/scene.splat';
 
         // 全局变量
-        let viewer, transformControl, splatMesh;
+        let viewer, transformControl, splatMesh, controls;
         let currentMode = 'view'; // view | translate | rotate | scale
         
         const ui = {
@@ -164,164 +165,9 @@
                 'sharedMemoryForWorkers': false,
                 'splatAlphaRemovalThreshold': 5 // 提高一点阈值，减少噪点
             });
-            
-            // 解决触摸穿透的关键
+
             viewer.renderer.domElement.style.touchAction = 'none';
             document.body.appendChild(viewer.renderer.domElement);
 
             // 添加网格地面 (参考系)
-            const grid = new THREE.GridHelper(20, 20, 0x444444, 0x222222);
-            grid.position.y = -1; //稍微下沉一点
-            viewer.threeScene.add(grid);
-
-            // 初始化编辑控制器
-            setupGizmo();
-
-            // 开始下载
-            try {
-                ui.msg.innerText = "正在下载模型...";
-                const buffer = await download(MODEL_URL);
-                await loadSplat(buffer);
-            } catch (e) {
-                ui.msg.innerText = "❌ 错误: " + e.message;
-                ui.pill.style.borderColor = "#f00";
-            }
-        }
-
-        // --- 2. 配置 Gizmo (坐标轴) ---
-        function setupGizmo() {
-            transformControl = new TransformControls(viewer.camera, viewer.renderer.domElement);
-            
-            // 📱 移动端优化：加大尺寸，更容易点中
-            transformControl.setSize(1.2); 
-            transformControl.setSpace('local'); // 本地坐标系编辑
-
-            // 事件：当拖拽开始时
-            transformControl.addEventListener('dragging-changed', (event) => {
-                // 如果正在拖拽 Gizmo，强制禁用相机，以防万一
-                if (viewer.controls) viewer.controls.enabled = !event.value;
-            });
-
-            viewer.threeScene.add(transformControl);
-        }
-
-        // --- 3. 下载与加载逻辑 ---
-        async function download(url) {
-            const resp = await fetch(url);
-            if (!resp.ok) throw new Error("网络错误 " + resp.status);
-            
-            const len = +resp.headers.get('Content-Length');
-            const reader = resp.body.getReader();
-            let received = 0;
-            let chunks = [];
-
-            while(true) {
-                const {done, value} = await reader.read();
-                if (done) break;
-                chunks.push(value);
-                received += value.length;
-                if(len) ui.bar.style.width = (received/len)*100 + "%";
-            }
-            return new Blob(chunks);
-        }
-
-        async function loadSplat(blob) {
-            ui.msg.innerText = "解析数据中...";
-            const url = URL.createObjectURL(blob) + '#.splat';
-            
-            // 加载
-            await viewer.addSplatScene(url, { 'showLoadingUI': false });
-            
-            // 获取对象
-            splatMesh = viewer.getSplatScene(0);
-            
-            if (splatMesh) {
-                ui.msg.innerText = "✅ 就绪";
-                setTimeout(() => ui.pill.style.display = 'none', 2000);
-                viewer.start();
-                
-                // 默认进入浏览模式
-                setMode('view');
-            }
-        }
-
-        // --- 4. 核心：模式切换逻辑 ---
-        
-        // 将函数挂载到 window 以便 HTML onclick 调用
-        window.setMode = function(mode) {
-            currentMode = mode;
-            
-            // 1. 更新 UI 高亮
-            ui.btns.forEach(b => b.classList.remove('active'));
-            const btnId = mode === 'view' ? 'btn-view' : 
-                          mode === 'translate' ? 'btn-translate' : 
-                          mode === 'rotate' ? 'btn-rotate' : 'btn-scale';
-            document.getElementById(btnId).classList.add('active');
-
-            // 2. 状态机逻辑 (关键！)
-            if (!splatMesh) return;
-
-            if (mode === 'view') {
-                // === 浏览模式 ===
-                // 隐藏 Gizmo
-                transformControl.detach();
-                transformControl.enabled = false; 
-                
-                // 解锁相机
-                if(viewer.controls) viewer.controls.enabled = true;
-
-                // 提示
-                showToast("👀 浏览模式：单指旋转，双指缩放");
-
-            } else {
-                // === 编辑模式 (移动/旋转/缩放) ===
-                // 附着 Gizmo
-                transformControl.attach(splatMesh);
-                transformControl.setMode(mode);
-                transformControl.enabled = true;
-
-                // 🔒 锁定相机：防止在编辑时误触旋转视角
-                if(viewer.controls) viewer.controls.enabled = false;
-
-                // 提示
-                const actionName = mode==='translate'?'移动':(mode==='rotate'?'旋转':'缩放');
-                showToast(`🔧 ${actionName}模式：拖动轴线 | 相机已锁定`);
-            }
-        };
-
-        window.resetAll = function() {
-            if (confirm("重置模型位置和视角？")) {
-                if(splatMesh) {
-                    splatMesh.position.set(0,0,0);
-                    splatMesh.rotation.set(0,0,0);
-                    splatMesh.scale.set(1,1,1);
-                }
-                viewer.camera.position.set(0, 2, 5);
-                viewer.camera.lookAt(0,0,0);
-                if(viewer.controls) viewer.controls.target.set(0,0,0);
-                
-                setMode('view'); // 重置后回到浏览模式
-            }
-        };
-
-        // 简单的屏幕提示
-        let toastTimer;
-        function showToast(text) {
-            ui.modeText.innerText = text;
-            ui.indicator.style.opacity = 1;
-            
-            // 编辑模式下常驻提示，浏览模式下3秒消失
-            if (currentMode === 'view') {
-                clearTimeout(toastTimer);
-                toastTimer = setTimeout(() => {
-                    ui.indicator.style.opacity = 0;
-                }, 3000);
-            }
-        }
-
-        // 启动
-        init();
-
-    </script>
-</body>
-</html>
+            const grid = new THREE.GridHelper(20, 20, 0x444444, 0
