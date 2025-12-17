@@ -184,4 +184,51 @@
 
                 const lockBtn = document.getElementById('lock-btn');
 
-                if
+                if (mode === 'view') {
+                    // === 浏览模式 ===
+                    lockBtn.classList.remove('visible'); // 隐藏锁定按钮
+                }
+            }
+
+            toggleLock() {
+                if (this.isLocked) this.unlockCamera();
+                else this.lockCamera();
+            }
+
+            lockCamera() {
+                this.isLocked = true;
+                this.controls.enabled = false; // 禁止相机
+                const btn = document.getElementById('lock-btn');
+                btn.classList.add('locked');
+                btn.innerText = "🔒 视角已锁 (可拖动模型)";
+            }
+
+            unlockCamera() {
+                this.isLocked = false;
+                this.controls.enabled = true; // 启用相机
+                const btn = document.getElementById('lock-btn');
+                btn.classList.remove('locked');
+                btn.innerText = "🔓 视角未锁";
+            }
+
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                
+                // 必须手动更新
+                this.controls.update();
+                this.viewer.update();
+                this.viewer.render();
+
+                // 更新陀螺仪控制
+                if (this.deviceOrientationControls) {
+                    this.deviceOrientationControls.update();
+                }
+            }
+        }
+
+        window.app = new App();
+        window.app.init();
+
+    </script>
+</body>
+</html>
