@@ -45,7 +45,6 @@
         
         .btn.active { background: #333; color: white; transform: translateY(-3px); }
         .btn.active.view { color: #00ff88; }
-        .btn.active.edit { color: #00aaff; }
 
         /* 分割线 */
         .sep { width: 1px; height: 35px; background: #444; margin: 10px 2px; }
@@ -84,21 +83,12 @@
             👁️<span>浏览</span>
         </button>
         <div class="sep"></div>
-        <button class="btn" id="b-translate" onclick="app.setMode('translate')">
-            ✢<span>移动</span>
-        </button>
-        <button class="btn" id="b-rotate" onclick="app.setMode('rotate')">
-            ↻<span>旋转</span>
-        </button>
-        <button class="btn" id="b-scale" onclick="app.setMode('scale')">
-            ⤢<span>缩放</span>
-        </button>
+        <!-- 去除编辑模式的按钮 -->
     </div>
 
     <script type="module">
         import * as THREE from 'three';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-        import { TransformControls } from 'three/addons/controls/TransformControls.js';
         import { Viewer } from '@mkkellogg/gaussian-splats-3d';
 
         const MODEL_URL = 'https://huggingface.co/datasets/liu1230/my-3dgs/resolve/main/scene.splat';
@@ -107,9 +97,9 @@
             constructor() {
                 this.viewer = null;
                 this.controls = null;
-                this.gizmo = null;
                 this.sceneRoot = null; // 我们的模型容器
                 this.isLocked = false;
+                this.deviceOrientationControls = null; // 陀螺仪控制
             }
 
             async init() {
@@ -141,26 +131,10 @@
                     this.controls.minDistance = 0.1;
                     this.controls.maxDistance = 100;
 
-                    // 4. TransformControls (坐标轴)
-                    this.gizmo = new TransformControls(this.viewer.camera, this.viewer.renderer.domElement);
-                    this.gizmo.setSize(1.2); // 放大
-                    this.gizmo.setSpace('local');
-                    // 🔥 强制坐标轴穿透显示 (DepthTest False)
-                    this.gizmo.traverse(child => {
-                        if(child.material) {
-                            child.material.depthTest = false;
-                            child.material.depthWrite = false;
-                            child.renderOrder = 9999;
-                        }
-                    });
-
-                    // 自动互斥：拖动坐标轴时，暂停相机
-                    this.gizmo.addEventListener('dragging-changed', (event) => {
-                        if (!this.isLocked) {
-                            this.controls.enabled = !event.value;
-                        }
-                    });
-                    this.viewer.threeScene.add(this.gizmo);
+                    // 4. 陀螺仪控制
+                    if (window.DeviceOrientationEvent) {
+                        this.deviceOrientationControls = new THREE.DeviceOrientationControls(this.viewer.camera);
+                    }
 
                     // 5. 添加网格辅助
                     const grid = new THREE.GridHelper(20, 20, 0x444444, 0x111111);
@@ -204,63 +178,10 @@
 
             setMode(mode) {
                 // UI 更新
-                document.querySelectorAll('.btn').forEach(b => b.classList.remove('active', 'view', 'edit'));
+                document.querySelectorAll('.btn').forEach(b => b.classList.remove('active', 'view'));
                 const btn = document.getElementById('b-' + mode);
                 btn.classList.add('active', mode === 'view' ? 'view' : 'edit');
 
                 const lockBtn = document.getElementById('lock-btn');
 
-                if (mode === 'view') {
-                    // === 浏览模式 ===
-                    this.gizmo.detach();
-                    this.unlockCamera(); // 强制解锁
-                    lockBtn.classList.remove('visible'); // 隐藏锁定按钮
-                } else {
-                    // === 编辑模式 ===
-                    this.gizmo.attach(this.sceneRoot); // 附着到容器上
-                    this.gizmo.setMode(mode);
-                    
-                    lockBtn.classList.add('visible'); // 显示锁定按钮
-                    // 默认先不锁，让用户自己锁，或者你可以选择默认锁
-                    // 这里为了防止误触，我们**自动锁定**一下试试？
-                    // 不，还是让用户手动锁比较符合直觉。
-                }
-            }
-
-            toggleLock() {
-                if (this.isLocked) this.unlockCamera();
-                else this.lockCamera();
-            }
-
-            lockCamera() {
-                this.isLocked = true;
-                this.controls.enabled = false; // 禁止相机
-                const btn = document.getElementById('lock-btn');
-                btn.classList.add('locked');
-                btn.innerText = "🔒 视角已锁 (可拖动模型)";
-            }
-
-            unlockCamera() {
-                this.isLocked = false;
-                this.controls.enabled = true; // 启用相机
-                const btn = document.getElementById('lock-btn');
-                btn.classList.remove('locked');
-                btn.innerText = "🔓 视角未锁";
-            }
-
-            animate() {
-                requestAnimationFrame(() => this.animate());
-                
-                // 必须手动更新
-                this.controls.update();
-                this.viewer.update();
-                this.viewer.render();
-            }
-        }
-
-        window.app = new App();
-        window.app.init();
-
-    </script>
-</body>
-</html>
+                if
