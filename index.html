@@ -3,156 +3,158 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>3DGS 最终完美版</title>
+    <title>3DGS 终极修正版</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #000; }
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
         
-        /* 加载提示文字 */
-        #info {
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            color: #0f0; font-family: monospace; font-size: 16px; text-align: center;
-            background: rgba(0,0,0,0.8); padding: 20px; border-radius: 10px; z-index: 999;
-            pointer-events: none;
+        /* 状态提示栏 */
+        #status-bar {
+            position: absolute; top: 0; left: 0; width: 100%; 
+            padding: 15px; background: rgba(0,0,0,0.8); 
+            color: #0f0; text-align: center; font-size: 14px; 
+            z-index: 999; pointer-events: none;
         }
 
-        /* 启动按钮 (iOS强制要求) */
-        #startBtn {
-            position: absolute; bottom: 20%; left: 50%; transform: translateX(-50%);
-            padding: 15px 40px; font-size: 18px; background: white; border: none; border-radius: 30px;
-            display: none; /* 默认隐藏，加载完显示 */
-            z-index: 1000; cursor: pointer;
+        /* 开始按钮 */
+        #start-btn {
+            position: absolute; bottom: 15%; left: 50%; transform: translateX(-50%);
+            padding: 12px 30px; font-size: 18px; border-radius: 25px;
+            background: white; border: none; cursor: pointer; display: none;
+            z-index: 1000; box-shadow: 0 0 10px rgba(255,255,255,0.5);
         }
     </style>
 
-    <!-- 🟢 核心升级：使用 0.4.1 版本引擎 (修复 AbortablePromise 报错) -->
+    <!-- 🟢 核心修复：升级到最新 v0.4.7 版本，彻底解决 Promise 报错 -->
     <script type="importmap">
     {
         "imports": {
             "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
             "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
-            "@mkkellogg/gaussian-splats-3d": "https://unpkg.com/@mkkellogg/gaussian-splats-3d@0.4.1/build/gaussian-splats-3d.module.js"
+            "@mkkellogg/gaussian-splats-3d": "https://unpkg.com/@mkkellogg/gaussian-splats-3d@0.4.7/build/gaussian-splats-3d.module.js"
         }
     }
     </script>
 </head>
 <body>
 
-    <div id="info">准备加载...</div>
-    <button id="startBtn">点击开始沉浸体验</button>
+    <div id="status-bar">正在连接引擎 v0.4.7...</div>
+    <button id="start-btn">开启陀螺仪观看</button>
 
     <script type="module">
         import * as THREE from 'three';
         import { Viewer } from '@mkkellogg/gaussian-splats-3d';
 
         // ==============================================================
-        // 👇 请在这里填入你刚才测试通过的 Hugging Face 链接
-        // 注意：必须是 resolve 且不带 blob 的那个链接
+        // 👇 请把你的 Hugging Face 直链粘贴在这里
         const MODEL_FILE = 'https://huggingface.co/datasets/liu1230/my-3dgs/resolve/main/scene.splat?download=true';
         // ==============================================================
 
-        const infoDiv = document.getElementById('info');
-        const startBtn = document.getElementById('startBtn');
+        const status = document.getElementById('status-bar');
+        const btn = document.getElementById('start-btn');
         let viewer;
         let isRunning = false;
         let initialGyro = null;
 
-        // 陀螺仪防穿帮参数
-        const MAX_X = 0.5; // 上下限制幅度
-        const MAX_Y = 0.6; // 左右限制幅度
+        // 陀螺仪限制角度（防穿帮）
+        const CLAMP_X = 0.5; // 上下约30度
+        const CLAMP_Y = 0.6; // 左右约35度
 
-        async function init() {
-            infoDiv.innerText = "🚀 引擎初始化 v0.4.1...";
-
+        async function main() {
+            // 1. 初始化引擎
             viewer = new Viewer({
                 'cameraUp': [0, 1, 0],
-                'initialCameraPosition': [0, 1, 5], // 稍微往后退一点，避免在模型内部
+                'initialCameraPosition': [0, 1, 4], // 相机位置
                 'initialCameraLookAt': [0, 0, 0],
-                'sharedMemoryForWorkers': false, // 关闭共享内存以兼容更多手机
+                // 启用共享内存（若手机白屏可改为 false）
+                'sharedMemoryForWorkers': false, 
             });
 
             document.body.appendChild(viewer.renderer.domElement);
 
-            infoDiv.innerText = "📥 开始下载模型...\n(大文件请耐心等待)";
-
+            // 2. 加载模型
+            status.innerText = "正在请求文件，请稍候...";
+            
             try {
                 await viewer.addSplatScene(MODEL_FILE, {
-                    'showLoadingUI': false,
+                    'showLoadingUI': false, // 关闭默认UI，用我们自己的
                     'splatAlphaRemovalThreshold': 5, 
-                    'scale': [1, 1, 1],
-                    'rotation': [0, 0, 0, 1],
                     'onProgress': (percent, percentStr) => {
-                         if (percentStr === 'NaN') {
-                             infoDiv.innerText = `📥 下载中... 数据流传输中`;
-                         } else {
-                             infoDiv.innerText = `📥 下载进度: ${percentStr}%`;
-                         }
+                        // 即使是 NaN 也不要慌，说明在下载流
+                        if (percentStr === 'NaN') {
+                            status.innerText = `📥 正在下载数据流... (保持网络通畅)`;
+                        } else {
+                            status.innerText = `📥 下载进度: ${percentStr}%`;
+                        }
                     }
                 });
 
-                // 加载成功！
-                infoDiv.innerText = "✅ 加载完成！\n请点击下方按钮开始";
-                startBtn.style.display = 'block';
+                // 3. 加载成功
+                status.innerText = "✅ 模型就绪！请点击下方按钮";
+                status.style.color = "#fff";
+                btn.style.display = "block";
 
             } catch (err) {
                 console.error(err);
-                infoDiv.style.color = 'red';
-                infoDiv.innerText = "❌ 报错了:\n" + err.message;
+                status.innerText = "❌ 错误: " + err.message;
+                status.style.color = "red";
+                // 只有 v0.4.7 才能正确捕获这个错误，不会再报 .reject 不是函数了
             }
         }
 
-        // 点击按钮启动陀螺仪
-        startBtn.addEventListener('click', async () => {
-            // 隐藏UI
-            startBtn.style.display = 'none';
-            infoDiv.style.display = 'none';
-            
+        // 4. 按钮点击事件
+        btn.addEventListener('click', () => {
+            btn.style.display = 'none';
+            status.style.display = 'none';
             viewer.start();
             isRunning = true;
-
-            // 请求权限 (iOS 13+)
-            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-                try {
-                    const response = await DeviceOrientationEvent.requestPermission();
-                    if (response === 'granted') {
-                        window.addEventListener('deviceorientation', handleOrientation);
-                    } else {
-                        alert('请允许陀螺仪权限');
-                    }
-                } catch (e) {
-                    console.error(e);
-                }
-            } else {
-                // 安卓直接监听
-                window.addEventListener('deviceorientation', handleOrientation);
-            }
+            requestGyro();
         });
 
-        // 陀螺仪逻辑 (防穿帮)
+        // 5. 申请陀螺仪权限
+        function requestGyro() {
+            if (typeof DeviceOrientationEvent !== 'undefined' && 
+                typeof DeviceOrientationEvent.requestPermission === 'function') {
+                // iOS 13+ 需要申请
+                DeviceOrientationEvent.requestPermission()
+                    .then(response => {
+                        if (response === 'granted') {
+                            window.addEventListener('deviceorientation', handleOrientation);
+                        } else {
+                            alert('需要允许陀螺仪权限才能观看');
+                        }
+                    })
+                    .catch(console.error);
+            } else {
+                // 安卓 / 普通设备直接监听
+                window.addEventListener('deviceorientation', handleOrientation);
+            }
+        }
+
+        // 6. 陀螺仪控制逻辑
         function handleOrientation(event) {
             if (!viewer || !isRunning) return;
 
-            // 第一次读取数据时，设为零点
+            // 记录初始角度
             if (!initialGyro && event.alpha !== null) {
                 initialGyro = { beta: event.beta, gamma: event.gamma };
                 return;
             }
             if (!initialGyro) return;
 
-            // 计算角度差 (转化为弧度)
+            // 计算差值
             let deltaX = (event.beta - initialGyro.beta) * (Math.PI / 180);
             let deltaY = (event.gamma - initialGyro.gamma) * (Math.PI / 180);
 
             // 限制角度 (Clamp)
-            deltaX = Math.max(-MAX_X, Math.min(MAX_X, deltaX));
-            deltaY = Math.max(-MAX_Y, Math.min(MAX_Y, deltaY));
+            deltaX = Math.max(-CLAMP_X, Math.min(CLAMP_X, deltaX));
+            deltaY = Math.max(-CLAMP_Y, Math.min(CLAMP_Y, deltaY));
 
-            // 应用旋转 (只转动，不位移)
+            // 应用旋转
             viewer.camera.rotation.set(deltaX, deltaY, 0, 'YXZ');
-            viewer.update(); // 强制更新
+            viewer.update();
         }
 
-        // 启动流程
-        init();
+        main();
     </script>
 </body>
 </html>
