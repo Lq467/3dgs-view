@@ -3,67 +3,73 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3DGS Arcball Ultimate</title>
+    <title>SuperSplat Mobile Clone</title>
     <style>
         body, html {
             width: 100%; height: 100%; margin: 0; padding: 0;
-            overflow: hidden; background-color: #080808;
-            touch-action: none; /* 关键：禁止浏览器处理触摸 */
-            user-select: none; font-family: sans-serif;
+            overflow: hidden; background-color: #1a1b1e; /* SuperSplat 风格深灰背景 */
+            touch-action: none; font-family: 'Segoe UI', Roboto, sans-serif;
+            user-select: none;
         }
 
-        /* 顶部提示条 */
-        #top-status {
-            position: absolute; top: 10px; left: 0; width: 100%;
-            text-align: center; pointer-events: none; z-index: 1000;
+        /* --- 顶部 Header (仿 SuperSplat) --- */
+        #header {
+            position: absolute; top: 0; left: 0; width: 100%; height: 50px;
+            background: #25262b; border-bottom: 1px solid #373a40;
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 15px; box-sizing: border-box; z-index: 1000;
         }
-        .status-pill {
-            background: rgba(30,30,30,0.9); color: #00ff88;
-            padding: 8px 20px; border-radius: 30px; font-size: 13px; font-weight: bold;
-            display: inline-block; border: 1px solid #444;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        .logo { color: #fff; font-weight: bold; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+        .logo span { color: #fcc419; } /* 黄色点缀 */
+
+        .reset-btn {
+            background: #373a40; color: #c1c2c5; border: 1px solid #5c5f66;
+            padding: 6px 12px; border-radius: 4px; font-size: 12px; cursor: pointer;
+        }
+        .reset-btn:active { background: #fcc419; color: #000; }
+
+        /* --- 视口区域 --- */
+        #viewport {
+            position: absolute; top: 50px; left: 0; width: 100%; bottom: 0;
+            z-index: 0;
         }
 
-        /* 底部操作栏 */
-        #dock {
+        /* --- 底部工具栏 (仿 SuperSplat Toolbar) --- */
+        #toolbar {
             position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
-            background: rgba(20,20,20,0.95); padding: 8px; border-radius: 24px;
-            display: flex; gap: 8px; border: 1px solid #444; z-index: 1000;
+            background: #25262b; padding: 6px; border-radius: 8px;
+            display: flex; gap: 4px; border: 1px solid #373a40;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.4); z-index: 1000;
         }
 
-        .btn {
-            width: 55px; height: 55px; background: transparent; border: none;
-            color: #777; font-size: 24px; border-radius: 18px;
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            transition: all 0.2s;
+        .tool-btn {
+            width: 44px; height: 44px; border-radius: 6px; border: none;
+            background: transparent; color: #909296; font-size: 20px;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: all 0.1s;
         }
-        .btn span { font-size: 10px; margin-top: 2px; font-weight: normal; }
         
-        /* 激活状态 */
-        .btn.active { background: #333; color: white; transform: translateY(-4px); }
-        .btn.active.view-mode { color: #00ff88; box-shadow: 0 5px 15px rgba(0,255,136,0.15); }
-        .btn.active.edit-mode { color: #00aaff; box-shadow: 0 5px 15px rgba(0,170,255,0.15); }
-
-        .divider { width: 1px; height: 35px; background: #444; margin: 10px 4px; }
-
-        /* 重置按钮 */
-        #reset-cam {
-            position: absolute; top: 20px; right: 20px;
-            background: rgba(0,0,0,0.6); color: white; border: 1px solid #555;
-            width: 40px; height: 40px; border-radius: 50%; cursor: pointer;
-            z-index: 1000; display: flex; align-items: center; justify-content: center;
-            font-size: 18px;
+        .tool-btn:active { transform: scale(0.95); }
+        .tool-btn.active { background: #1971c2; color: #fff; } /* 蓝色激活态 */
+        
+        /* 提示条 */
+        #status-bar {
+            position: absolute; top: 60px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.6); color: white; padding: 6px 12px;
+            border-radius: 20px; font-size: 12px; pointer-events: none; opacity: 0; transition: opacity 0.3s;
         }
 
-        /* 加载动画 */
+        /* 加载中 */
         #loader {
-            position: absolute; top:0; left:0; width:100%; height:100%;
-            background:#000; z-index:5000; display:flex; flex-direction:column;
-            align-items:center; justify-content:center; transition: opacity 0.5s;
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: #1a1b1e; z-index: 5000; display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
         }
-        .spinner { width:40px; height:40px; border:4px solid #333; border-top-color:#00ff88; border-radius:50%; animation:spin 1s linear infinite; }
+        .spinner {
+            width: 40px; height: 40px; border: 4px solid #373a40; border-top-color: #fcc419;
+            border-radius: 50%; animation: spin 1s infinite linear;
+        }
         @keyframes spin { 100% { transform: rotate(360deg); } }
-        .log { color: #666; font-size: 12px; margin-top: 10px; font-family: monospace; }
     </style>
 
     <script type="importmap">
@@ -80,185 +86,191 @@
 
     <div id="loader">
         <div class="spinner"></div>
-        <div class="log" id="load-log">初始化引擎...</div>
+        <div style="color:#888; margin-top:15px; font-size:14px;">Loading Scene...</div>
     </div>
 
-    <div id="top-status">
-        <div class="status-pill" id="status-text">👀 浏览模式：任意旋转</div>
+    <div id="header">
+        <div class="logo"><span>⚡</span> SuperSplat Mobile</div>
+        <button class="reset-btn" id="btn-reset">Reset Camera</button>
     </div>
 
-    <button id="reset-cam" title="重置视角">↺</button>
+    <div id="status-bar"></div>
 
-    <div id="dock">
-        <button class="btn active view-mode" onclick="app.setMode('view')" id="btn-view">
-            👁️<span>浏览</span>
-        </button>
-        
-        <div class="divider"></div>
+    <div id="viewport"></div>
 
-        <button class="btn" onclick="app.setMode('translate')" id="btn-translate">
-            ✢<span>移动</span>
-        </button>
-        <button class="btn" onclick="app.setMode('rotate')" id="btn-rotate">
-            ↻<span>旋转</span>
-        </button>
-        <button class="btn" onclick="app.setMode('scale')" id="btn-scale">
-            ⤢<span>缩放</span>
-        </button>
+    <div id="toolbar">
+        <button class="tool-btn active" id="mode-view" title="View">👁️</button>
+        <div style="width:1px; background:#373a40; margin:0 4px;"></div>
+        <button class="tool-btn" id="mode-translate" title="Move">✢</button>
+        <button class="tool-btn" id="mode-rotate" title="Rotate">↻</button>
+        <button class="tool-btn" id="mode-scale" title="Scale">⤢</button>
     </div>
 
     <script type="module">
         import * as THREE from 'three';
-        // 🌟 核心改变1：使用 ArcballControls 实现真360度旋转
-        import { ArcballControls } from 'three/addons/controls/ArcballControls.js';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
         import { TransformControls } from 'three/addons/controls/TransformControls.js';
         import { Viewer } from '@mkkellogg/gaussian-splats-3d';
 
         const MODEL_URL = 'https://huggingface.co/datasets/liu1230/my-3dgs/resolve/main/scene.splat';
 
-        class App {
+        class Editor {
             constructor() {
+                this.container = document.getElementById('viewport');
                 this.viewer = null;
-                this.controls = null;
+                this.orbit = null;
                 this.gizmo = null;
+                this.sceneRoot = null; // 我们的“容器”
                 this.splatMesh = null;
+                this.currentMode = 'view';
             }
 
             async init() {
+                // 1. 初始化 Viewer
+                this.viewer = new Viewer({
+                    'cameraUp': [0, 1, 0],
+                    'initialCameraPosition': [0, 2, 5],
+                    'initialCameraLookAt': [0, 0, 0],
+                    'useBuiltInControls': false, // 🚫 彻底禁用内置，防止抢事件
+                    'selfDrivenMode': false,     // 手动驱动渲染循环
+                    'sharedMemoryForWorkers': false
+                });
+
+                this.container.appendChild(this.viewer.renderer.domElement);
+
+                // 2. 创建一个“代理容器” (SceneRoot)
+                // ⚠️ 核心技巧：我们把 splat 放进这个 Group，然后控制这个 Group
+                this.sceneRoot = new THREE.Group();
+                this.viewer.threeScene.add(this.sceneRoot);
+
+                // 3. 设置 OrbitControls (相机控制)
+                this.orbit = new OrbitControls(this.viewer.camera, this.viewer.renderer.domElement);
+                this.orbit.enableDamping = true;
+                this.orbit.dampingFactor = 0.05;
+                this.orbit.minDistance = 0.1;
+                this.orbit.maxDistance = 500;
+                
+                // 4. 设置 TransformControls (Gizmo)
+                this.gizmo = new TransformControls(this.viewer.camera, this.viewer.renderer.domElement);
+                this.gizmo.setSize(1.2); // 放大方便点
+                this.gizmo.setSpace('local'); // 本地坐标系
+                
+                // 解决 Gizmo 拖拽时相机乱转的问题
+                this.gizmo.addEventListener('dragging-changed', (event) => {
+                    this.orbit.enabled = !event.value;
+                });
+                
+                this.viewer.threeScene.add(this.gizmo);
+
+                // 5. 添加网格 (SuperSplat 风格)
+                const grid = new THREE.GridHelper(20, 20, 0x444444, 0x222222);
+                grid.position.y = -0.5;
+                this.viewer.threeScene.add(grid);
+
+                // 6. 启动渲染
+                this.animate();
+
+                // 7. 加载数据
+                await this.loadSplat();
+
+                // 8. 绑定UI
+                this.bindEvents();
+            }
+
+            async loadSplat() {
                 try {
-                    const log = (msg) => document.getElementById('load-log').innerText = msg;
-
-                    // 1. 初始化 Viewer (禁用自带控制，禁用自驱动)
-                    this.viewer = new Viewer({
-                        'cameraUp': [0, 1, 0],
-                        'initialCameraPosition': [0, 0, 5],
-                        'initialCameraLookAt': [0, 0, 0],
-                        'useBuiltInControls': false, 
-                        'selfDrivenMode': false,
-                        'sharedMemoryForWorkers': false
-                    });
-                    
-                    const canvas = this.viewer.renderer.domElement;
-                    document.body.appendChild(canvas);
-
-                    // 2. 🌟 初始化 ArcballControls (360度无死角)
-                    // 注意：Arcball 需要 scene 参数来绘制Gizmo(虽然我们会隐藏它)
-                    this.controls = new ArcballControls(this.viewer.camera, canvas, this.viewer.threeScene);
-                    this.controls.enableAnimations = true; // 惯性
-                    this.controls.dampingFactor = 10;
-                    this.controls.wMax = 20; // 允许快速翻滚
-                    this.controls.setGizmosVisible(false); // 隐藏Arcball自带的圆圈UI
-
-                    // 3. 初始化 TransformControls (编辑轴)
-                    this.gizmo = new TransformControls(this.viewer.camera, canvas);
-                    this.gizmo.setSize(1.5); // 放大坐标轴，方便手机点击
-                    this.gizmo.setSpace('local');
-                    
-                    // 🔥 让坐标轴永远在最上层 (防止被模型挡住点不到)
-                    this.gizmo.traverse(child => {
-                        if(child.material) {
-                            child.material.depthTest = false;
-                            child.material.depthWrite = false;
-                            child.renderOrder = 9999;
-                        }
-                    });
-                    this.viewer.threeScene.add(this.gizmo);
-
-                    // 4. 加载模型
-                    log("下载模型数据...");
+                    // 下载
                     const response = await fetch(MODEL_URL);
-                    const reader = response.body.getReader();
-                    const len = +response.headers.get('Content-Length');
-                    let received = 0;
-                    let chunks = [];
-
-                    while(true) {
-                        const {done, value} = await reader.read();
-                        if (done) break;
-                        chunks.push(value);
-                        received += value.length;
-                        if(len) log(`下载中 ${Math.round((received/len)*100)}%`);
-                    }
-
-                    const blob = new Blob(chunks);
+                    const blob = await response.blob();
                     const url = URL.createObjectURL(blob) + '#.splat';
+
+                    // 加载
+                    await this.viewer.addSplatScene(url, { 'showLoadingUI': false });
                     
-                    log("渲染模型...");
-                    await this.viewer.addSplatScene(url, { 'showLoadingUI': false, 'splatAlphaRemovalThreshold': 5 });
-                    this.splatMesh = this.viewer.getSplatScene(0);
-
-                    // 隐藏Loading
-                    document.getElementById('loader').style.opacity = 0;
-                    setTimeout(() => document.getElementById('loader').style.display = 'none', 500);
-
-                    // 5. 启动循环
-                    this.animate();
-
-                    // 默认进入浏览模式
-                    this.setMode('view');
+                    // 获取真正的模型对象
+                    // 等待一帧，确保对象已创建
+                    setTimeout(() => {
+                        this.splatMesh = this.viewer.getSplatScene(0);
+                        
+                        if (this.splatMesh) {
+                            // ⚠️ 关键步骤：把 Splat 模型从原来的位置挪到我们的 sceneRoot 里
+                            // 这样我们旋转 sceneRoot 时，模型就会跟着动，不会被库重置
+                            this.sceneRoot.add(this.splatMesh);
+                            
+                            // 默认进入浏览模式
+                            this.setMode('view');
+                            
+                            // 隐藏Loading
+                            document.getElementById('loader').style.display = 'none';
+                        }
+                    }, 100);
 
                 } catch (e) {
-                    alert("错误: " + e.message);
+                    alert("Load Error: " + e.message);
                 }
             }
 
             setMode(mode) {
-                // UI 切换
-                document.querySelectorAll('.btn').forEach(b => b.classList.remove('active', 'view-mode', 'edit-mode'));
-                const btn = document.getElementById(mode === 'view' ? 'btn-view' : 'btn-' + mode);
-                btn.classList.add('active', mode === 'view' ? 'view-mode' : 'edit-mode');
-
-                const status = document.getElementById('status-text');
+                this.currentMode = mode;
+                
+                // UI 更新
+                document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+                document.getElementById('mode-' + mode).classList.add('active');
 
                 if (mode === 'view') {
-                    // === 浏览模式 ===
-                    this.gizmo.detach(); // 移除坐标轴
-                    
-                    // ✅ 启用相机 (360旋转)
-                    this.controls.enabled = true;
-                    
-                    status.innerText = "👀 浏览模式：双指缩放，任意旋转";
-                    status.style.color = "#00ff88";
+                    this.gizmo.detach();
+                    this.orbit.enabled = true;
+                    this.showToast("View Mode: Swipe to Rotate");
                 } else {
-                    // === 编辑模式 ===
-                    if (this.splatMesh) {
-                        this.gizmo.attach(this.splatMesh);
+                    // 如果容器里有东西，就附着到容器上
+                    if (this.sceneRoot) {
+                        this.gizmo.attach(this.sceneRoot);
                         this.gizmo.setMode(mode);
+                        this.showToast(mode.charAt(0).toUpperCase() + mode.slice(1) + " Mode");
                     }
-                    
-                    // ⛔️ 强制禁用相机！
-                    // 这是解决“操作无反应”的关键。
-                    // 进入编辑模式后，屏幕除了坐标轴，其他地方怎么摸都不会动。
-                    // 这样确保你的触摸 100% 传给坐标轴，而不是被相机吃掉。
-                    this.controls.enabled = false;
-
-                    status.innerText = `🔧 ${mode === 'translate'?'移动':(mode==='rotate'?'旋转':'缩放')}模式：相机已锁，请拖动轴线`;
-                    status.style.color = "#00aaff";
                 }
-            }
-
-            resetView() {
-                this.controls.reset();
-                // Arcball重置有时候方向不对，手动矫正
-                this.viewer.camera.position.set(0, 0, 5);
-                this.viewer.camera.lookAt(0, 0, 0);
-                this.viewer.camera.up.set(0, 1, 0);
             }
 
             animate() {
                 requestAnimationFrame(() => this.animate());
                 
-                // 每一帧都必须更新
-                this.controls.update();
+                // 更新控制器
+                this.orbit.update();
+                
+                // 渲染
                 this.viewer.update();
                 this.viewer.render();
             }
+
+            bindEvents() {
+                // 模式切换
+                ['view', 'translate', 'rotate', 'scale'].forEach(m => {
+                    document.getElementById('mode-' + m).addEventListener('click', () => this.setMode(m));
+                    document.getElementById('mode-' + m).addEventListener('touchstart', (e) => {
+                         e.preventDefault(); // 防止双击缩放
+                         this.setMode(m);
+                    }, {passive: false});
+                });
+
+                // 重置相机
+                document.getElementById('btn-reset').addEventListener('click', () => {
+                    this.orbit.reset();
+                    this.viewer.camera.position.set(0, 2, 5);
+                });
+            }
+
+            showToast(msg) {
+                const bar = document.getElementById('status-bar');
+                bar.innerText = msg;
+                bar.style.opacity = 1;
+                clearTimeout(this.timer);
+                this.timer = setTimeout(() => bar.style.opacity = 0, 2000);
+            }
         }
 
-        window.app = new App();
-        window.app.init();
-
-        document.getElementById('reset-cam').addEventListener('click', () => window.app.resetView());
+        // 启动
+        const editor = new Editor();
+        editor.init();
 
     </script>
 </body>
