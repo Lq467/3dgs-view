@@ -3,50 +3,52 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3DGS Gyro Viewer</title>
+    <title>3DGS Gyro Immersive</title>
     <style>
+        /* 1. 基础环境：黑底、无滚动 */
         body, html {
             width: 100%; height: 100%; margin: 0; padding: 0;
             overflow: hidden; background-color: #000;
-            touch-action: none; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            touch-action: none; /* 禁止系统默认触摸 */
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             user-select: none;
         }
 
-        /* 顶部标题栏 */
-        #header {
+        /* 顶部提示条 */
+        #top-bar {
             position: absolute; top: 0; left: 0; width: 100%; height: 60px;
             background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent);
-            display: flex; justify-content: center; align-items: center;
             pointer-events: none; z-index: 1000;
+            display: flex; justify-content: center; align-items: center;
         }
         .status-pill {
-            background: rgba(30,30,30,0.6); backdrop-filter: blur(10px);
-            color: #fff; padding: 6px 16px; border-radius: 20px;
-            font-size: 13px; border: 1px solid rgba(255,255,255,0.2);
+            background: rgba(20, 20, 20, 0.6); color: #fff;
+            padding: 8px 20px; border-radius: 30px; font-size: 14px;
+            border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(10px);
             transition: all 0.3s;
         }
-        .status-pill.active {
+        .status-pill.gyro-on {
             background: rgba(0, 255, 136, 0.2); color: #00ff88; border-color: #00ff88;
             box-shadow: 0 0 15px rgba(0,255,136,0.3);
         }
 
-        /* 底部控制按钮 */
+        /* 底部按钮区 */
         #controls {
             position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
-            display: flex; gap: 20px; z-index: 1000;
+            display: flex; gap: 25px; z-index: 1000;
         }
 
         .btn {
-            width: 60px; height: 60px; border-radius: 50%; border: none;
+            width: 64px; height: 64px; border-radius: 50%; border: none;
             background: rgba(40,40,40,0.9); color: #ccc;
-            font-size: 24px; display: flex; align-items: center; justify-content: center;
-            cursor: pointer; box-shadow: 0 5px 20px rgba(0,0,0,0.5);
-            transition: transform 0.1s, background 0.3s;
+            font-size: 26px; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; box-shadow: 0 8px 25px rgba(0,0,0,0.6);
             border: 1px solid rgba(255,255,255,0.1);
+            transition: transform 0.1s, background 0.3s;
         }
         .btn:active { transform: scale(0.9) translateX(-50%); }
-        
-        /* 陀螺仪激活样式 */
+
+        /* 陀螺仪激活时的按钮样式 */
         #btn-gyro.active {
             background: #00ff88; color: #000; box-shadow: 0 0 20px rgba(0,255,136,0.6);
         }
@@ -57,8 +59,13 @@
             display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:5000;
             transition: opacity 0.5s;
         }
-        .spinner { width:40px; height:40px; border:3px solid #333; border-top-color:#00ff88; border-radius:50%; animation:spin 1s infinite linear; }
-        @keyframes spin { 100% { transform: rotate(360deg); } }
+        .loader-text { color:#00ff88; margin-top:15px; font-family:monospace; }
+
+        /* 调试日志 (如果出问题可以看到) */
+        #err-log {
+            position:absolute; top:0; left:0; color:red; font-size:10px; 
+            background:rgba(0,0,0,0.8); pointer-events:none; z-index:9999;
+        }
     </style>
 
     <script type="importmap">
@@ -73,18 +80,20 @@
 </head>
 <body>
 
+    <div id="err-log"></div>
+
     <div id="loader">
-        <div class="spinner"></div>
-        <div style="color:#666; font-size:12px; margin-top:15px;">模型加载中...</div>
+        <div style="font-size:40px;">🔮</div>
+        <div class="loader-text">加载全景模型...</div>
     </div>
 
-    <div id="header">
-        <div class="status-pill" id="status-text">👆 手指滑动调整视角</div>
+    <div id="top-bar">
+        <div class="status-pill" id="status-msg">👆 触摸滑动以调整视角</div>
     </div>
 
     <div id="controls">
         <button class="btn" id="btn-reset" title="重置视角">↺</button>
-        <button class="btn" id="btn-gyro" title="开启体感预览">📱</button>
+        <button class="btn" id="btn-gyro" title="体感模式">📱</button>
     </div>
 
     <script type="module">
@@ -92,168 +101,165 @@
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
         import { Viewer } from '@mkkellogg/gaussian-splats-3d';
 
+        // 错误捕获
+        window.onerror = (msg) => document.getElementById('err-log').innerHTML += msg + '<br>';
+
         const MODEL_URL = 'https://huggingface.co/datasets/liu1230/my-3dgs/resolve/main/scene.splat';
 
         class App {
             constructor() {
                 this.viewer = null;
                 this.controls = null;
-                this.gyroEnabled = false;
+                this.gyroActive = false;
 
-                // 陀螺仪相关变量
-                this.baseQuaternion = new THREE.Quaternion(); // 开启陀螺仪时的初始角度
-                this.initialDeviceState = { beta: 0, gamma: 0 }; // 初始手机姿态
-                this.currentDeviceState = { beta: 0, gamma: 0 };
+                // 陀螺仪运算专用变量
+                this.baseQuaternion = new THREE.Quaternion(); // 开启那一刻的基准角度
+                this.startBeta = 0;
+                this.startGamma = 0;
+                this.currentBeta = 0;
+                this.currentGamma = 0;
             }
 
             async init() {
-                // 1. 初始化引擎
-                this.viewer = new Viewer({
-                    'cameraUp': [0, 1, 0],
-                    'initialCameraPosition': [0, 1, 4],
-                    'initialCameraLookAt': [0, 0, 0],
-                    'useBuiltInControls': false, // 禁用内置，使用我们自己的
-                    'selfDrivenMode': false,
-                    'sharedMemoryForWorkers': false
-                });
-                document.body.appendChild(this.viewer.renderer.domElement);
+                try {
+                    // 1. 初始化 Viewer (完全复刻完美版的参数)
+                    this.viewer = new Viewer({
+                        'cameraUp': [0, 1, 0],
+                        'initialCameraPosition': [0, 1, 4],
+                        'initialCameraLookAt': [0, 0, 0],
+                        'useBuiltInControls': false, // 🚫 关键：关掉内置，用我们自己的
+                        'selfDrivenMode': false,     // 手动驱动渲染
+                        'sharedMemoryForWorkers': false
+                    });
+                    document.body.appendChild(this.viewer.renderer.domElement);
 
-                // 2. 初始化 OrbitControls (触摸控制)
-                this.controls = new OrbitControls(this.viewer.camera, this.viewer.renderer.domElement);
-                this.controls.enableDamping = true;
-                this.controls.dampingFactor = 0.05;
-                this.controls.minDistance = 0.1;
-                this.controls.maxDistance = 100;
+                    // 2. 初始化 OrbitControls (触摸控制)
+                    // ⚠️ 关键：绑定到 document.body，确保触摸响应绝对灵敏
+                    this.controls = new OrbitControls(this.viewer.camera, document.body);
+                    this.controls.enableDamping = true; // 开启惯性
+                    this.controls.dampingFactor = 0.05;
+                    this.controls.minDistance = 0.1;
+                    this.controls.maxDistance = 100;
+                    // 允许大角度观察
+                    this.controls.minPolarAngle = 0; 
+                    this.controls.maxPolarAngle = Math.PI;
 
-                // 3. 监听设备方向 (但不立即应用)
-                window.addEventListener('deviceorientation', (e) => this.handleOrientation(e));
+                    // 3. 监听陀螺仪数据 (时刻准备着)
+                    window.addEventListener('deviceorientation', (e) => {
+                        this.currentBeta = e.beta || 0;   // 前后翻转
+                        this.currentGamma = e.gamma || 0; // 左右翻转
+                    });
 
-                // 4. 启动循环
-                this.animate();
+                    // 4. 启动渲染循环
+                    this.animate();
 
-                // 5. 加载模型
-                await this.loadModel();
+                    // 5. 加载模型
+                    await this.loadModel();
 
-                // 6. 绑定按钮
-                this.bindEvents();
+                    // 6. 绑定按钮
+                    this.bindEvents();
+
+                } catch (e) {
+                    alert("初始化错误: " + e.message);
+                }
             }
 
             async loadModel() {
-                try {
-                    const response = await fetch(MODEL_URL);
-                    const blob = await response.blob();
-                    const url = URL.createObjectURL(blob) + '#.splat';
+                const response = await fetch(MODEL_URL);
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob) + '#.splat';
 
-                    await this.viewer.addSplatScene(url, { 'showLoadingUI': false });
-                    
-                    document.getElementById('loader').style.opacity = 0;
-                    setTimeout(() => document.getElementById('loader').style.display = 'none', 500);
-                } catch (e) {
-                    alert("加载失败: " + e.message);
-                }
-            }
-
-            // 处理陀螺仪数据
-            handleOrientation(event) {
-                if (!this.gyroEnabled) return;
-
-                // beta: 前后倾斜 (-180 ~ 180)
-                // gamma: 左右倾斜 (-90 ~ 90)
-                // alpha: 罗盘方向 (我们不需要，因为是相对运动)
-                this.currentDeviceState.beta = event.beta || 0;
-                this.currentDeviceState.gamma = event.gamma || 0;
+                await this.viewer.addSplatScene(url, { 'showLoadingUI': false });
+                
+                // 隐藏 Loading
+                document.getElementById('loader').style.opacity = 0;
+                setTimeout(() => document.getElementById('loader').style.display = 'none', 500);
             }
 
             toggleGyro() {
-                // iOS 13+ 权限请求
+                // 处理 iOS 13+ 权限
                 if (typeof DeviceOrientationEvent !== 'undefined' && 
                     typeof DeviceOrientationEvent.requestPermission === 'function') {
-                    
                     DeviceOrientationEvent.requestPermission()
-                        .then(permissionState => {
-                            if (permissionState === 'granted') {
-                                this._switchGyroState();
-                            } else {
-                                alert("需要陀螺仪权限才能使用此功能");
-                            }
+                        .then(state => {
+                            if (state === 'granted') this._setGyroState(!this.gyroActive);
+                            else alert("需要权限才能使用体感");
                         })
                         .catch(console.error);
                 } else {
-                    // Android 或旧版 iOS 直接切换
-                    this._switchGyroState();
+                    this._setGyroState(!this.gyroActive);
                 }
             }
 
-            _switchGyroState() {
-                this.gyroEnabled = !this.gyroEnabled;
-                
+            _setGyroState(active) {
+                this.gyroActive = active;
                 const btn = document.getElementById('btn-gyro');
-                const status = document.getElementById('status-text');
+                const msg = document.getElementById('status-msg');
 
-                if (this.gyroEnabled) {
-                    // === 开启陀螺仪模式 ===
-                    
-                    // 1. 禁用触摸控制 (防止冲突)
+                if (this.gyroActive) {
+                    // === 开启陀螺仪 ===
+                    // 1. 禁用触摸，防止冲突
                     this.controls.enabled = false;
                     
-                    // 2. 记录当前的基准状态 (把当前视角作为 0 点)
+                    // 2. 锁定当前视角为“基准”
                     this.baseQuaternion.copy(this.viewer.camera.quaternion);
-                    this.initialDeviceState.beta = this.currentDeviceState.beta;
-                    this.initialDeviceState.gamma = this.currentDeviceState.gamma;
+                    this.startBeta = this.currentBeta;
+                    this.startGamma = this.currentGamma;
 
+                    // UI 变化
                     btn.classList.add('active');
-                    status.classList.add('active');
-                    status.innerText = "📱 晃动手机以预览";
-                } else {
-                    // === 回到触摸模式 ===
-                    this.controls.enabled = true; // 恢复手指控制
-                    
-                    // 恢复到开启前的基准角度 (可选，防止视角歪得太厉害)
-                    // this.viewer.camera.quaternion.copy(this.baseQuaternion);
+                    msg.classList.add('gyro-on');
+                    msg.innerText = "📱 晃动手机微调视角";
 
+                } else {
+                    // === 关闭陀螺仪 ===
+                    // 1. 恢复触摸
+                    this.controls.enabled = true;
+                    
+                    // UI 变化
                     btn.classList.remove('active');
-                    status.classList.remove('active');
-                    status.innerText = "👆 手指滑动调整视角";
+                    msg.classList.remove('gyro-on');
+                    msg.innerText = "👆 触摸滑动以调整视角";
                 }
             }
 
             animate() {
                 requestAnimationFrame(() => this.animate());
 
-                if (this.gyroEnabled) {
-                    // === 陀螺仪逻辑 ===
+                if (this.gyroActive) {
+                    // === 陀螺仪模式逻辑 ===
                     
-                    // 计算偏移量 (当前角度 - 初始角度)
-                    let deltaBeta = this.currentDeviceState.beta - this.initialDeviceState.beta;
-                    let deltaGamma = this.currentDeviceState.gamma - this.initialDeviceState.gamma;
+                    // 1. 计算偏移量 (当前姿态 - 初始姿态)
+                    let deltaX = this.currentBeta - this.startBeta;   // 上下点头
+                    let deltaY = this.currentGamma - this.startGamma; // 左右摇头
 
-                    // 限制幅度 (幅度不要太大) -> 灵敏度系数 0.5 度
-                    const SENSITIVITY = 0.5; 
-                    const MAX_ANGLE = 30; // 最大偏转 30 度
+                    // 2. 限制幅度 (Clamp) - 比如最多偏转 20 度
+                    const MAX_DEG = 20;
+                    deltaX = Math.max(-MAX_DEG, Math.min(MAX_DEG, deltaX));
+                    deltaY = Math.max(-MAX_DEG, Math.min(MAX_DEG, deltaY));
 
-                    // 简单Clamp防止翻转过度
-                    deltaBeta = Math.max(-MAX_ANGLE, Math.min(MAX_ANGLE, deltaBeta));
-                    deltaGamma = Math.max(-MAX_ANGLE, Math.min(MAX_ANGLE, deltaGamma));
-
-                    // 将角度转为弧度
-                    const radX = THREE.MathUtils.degToRad(deltaBeta * SENSITIVITY);
-                    const radY = THREE.MathUtils.degToRad(deltaGamma * SENSITIVITY);
-
-                    // 创建偏移旋转
+                    // 3. 灵敏度 (0.5 表示动1度，画面转0.5度)
+                    const SENSITIVITY = 0.5;
+                    
+                    // 4. 将偏移转为四元数
                     const qx = new THREE.Quaternion();
-                    qx.setFromAxisAngle(new THREE.Vector3(1, 0, 0), radX); // 上下点头 (Beta)
+                    qx.setFromAxisAngle(new THREE.Vector3(1, 0, 0), THREE.MathUtils.degToRad(deltaX * SENSITIVITY));
                     
                     const qy = new THREE.Quaternion();
-                    qy.setFromAxisAngle(new THREE.Vector3(0, 1, 0), radY); // 左右摇头 (Gamma)
+                    qy.setFromAxisAngle(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(deltaY * SENSITIVITY));
 
-                    // 应用旋转：基准角度 * 偏移Y * 偏移X
-                    // 注意乘法顺序影响旋转轴是本地还是世界
-                    this.viewer.camera.quaternion.copy(this.baseQuaternion);
-                    this.viewer.camera.quaternion.multiply(qy);
-                    this.viewer.camera.quaternion.multiply(qx);
+                    // 5. 应用：基准视角 * 偏移
+                    // 顺序：先左右偏，再上下偏 (符合头部运动直觉)
+                    const targetQ = this.baseQuaternion.clone();
+                    targetQ.multiply(qy); // 左右
+                    targetQ.multiply(qx); // 上下
+                    
+                    // 6. 平滑插值 (slerp) 让运动更柔和
+                    this.viewer.camera.quaternion.slerp(targetQ, 0.1);
 
                 } else {
-                    // === 触摸逻辑 ===
+                    // === 触控模式逻辑 ===
+                    // 必须每帧更新 controls 才有惯性效果
                     this.controls.update();
                 }
 
@@ -264,8 +270,7 @@
             bindEvents() {
                 document.getElementById('btn-reset').addEventListener('click', () => {
                     this.controls.reset();
-                    // 关掉陀螺仪，回到初始状态
-                    if(this.gyroEnabled) this._switchGyroState();
+                    if(this.gyroActive) this._setGyroState(false);
                 });
 
                 document.getElementById('btn-gyro').addEventListener('click', () => {
