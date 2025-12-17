@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>3DGS 成功运行版</title>
+    <title>3DGS 最终流式版</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
         #status-bar {
@@ -19,7 +19,6 @@
             z-index: 1000;
         }
     </style>
-    <!-- 使用最新的 0.4.7 引擎 -->
     <script type="importmap">
     {
         "imports": {
@@ -33,13 +32,13 @@
 <body>
 
     <div id="status-bar">正在连接...</div>
-    <button id="start-btn">开启陀螺仪观看</button>
+    <button id="start-btn">开启陀螺仪</button>
 
     <script type="module">
         import * as THREE from 'three';
         import { Viewer } from '@mkkellogg/gaussian-splats-3d';
 
-        // 🟢 核心修改：去掉了 ?download=true，让引擎能识别出 .splat 后缀
+        // 👇 确保你的 Hugging Face 仓库是 Public 的！
         const MODEL_FILE = 'https://huggingface.co/datasets/liu1230/my-3dgs/resolve/main/scene.splat';
 
         const status = document.getElementById('status-bar');
@@ -48,7 +47,6 @@
         let isRunning = false;
         let initialGyro = null;
         
-        // 陀螺仪角度限制
         const CLAMP_X = 0.5; 
         const CLAMP_Y = 0.6; 
 
@@ -64,21 +62,23 @@
             status.innerText = "正在请求文件...";
             
             try {
-                // 这里加了 format: 'splat' 双重保险
                 await viewer.addSplatScene(MODEL_FILE, {
                     'showLoadingUI': false,
+                    // 🟢 关键修改1：强制指定格式
                     'format': 'splat',
+                    // 🟢 关键修改2：开启流式加载 (streamView)，这会跳过整体下载，手机更不容易崩
+                    'streamView': true, 
                     'splatAlphaRemovalThreshold': 5, 
                     'onProgress': (percent, percentStr) => {
                         if (percentStr === 'NaN') {
-                            status.innerText = `📥 下载中... (数据流传输中)`;
+                            status.innerText = `📥 正在流式加载... 请稍候`;
                         } else {
                             status.innerText = `📥 下载进度: ${percentStr}%`;
                         }
                     }
                 });
 
-                status.innerText = "✅ 加载成功！请点击下方按钮";
+                status.innerText = "✅ 加载成功！";
                 status.style.color = "#fff";
                 btn.style.display = "block";
 
@@ -86,6 +86,11 @@
                 console.error(err);
                 status.innerText = "❌ 错误: " + err.message;
                 status.style.color = "red";
+                
+                // 智能提示错误原因
+                if (err.message.includes('format') || err.message.includes('404') || err.message.includes('<')) {
+                     status.innerText += "\n👉 严重怀疑：你的 Hugging Face 仓库是私有的(Private)，请改为公开(Public)！";
+                }
             }
         }
 
