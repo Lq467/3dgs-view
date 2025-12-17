@@ -3,69 +3,88 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3DGS 移动端触控优化版</title>
+    <title>3DGS 移动端专业版</title>
     <style>
-        /* 1. 核心修复：禁止页面的所有默认滚动/缩放行为，让位给3D操作 */
+        /* 全局禁止默认触控，交给3D引擎 */
         body { 
-            margin: 0; overflow: hidden; background-color: #1a1a1a; font-family: sans-serif; 
-            touch-action: none; /* 关键：禁止浏览器处理触摸，全权交给JS */
-        }
-        
-        #loader-bar {
-            position: absolute; top: 0; left: 0; width: 0%; height: 4px; 
-            background: #00ff88; z-index: 2000; transition: width 0.2s;
-        }
-        #status-text {
-            position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
-            color: #fff; background: rgba(0,0,0,0.6); padding: 5px 15px;
-            border-radius: 20px; font-size: 13px; pointer-events: none; z-index: 2000;
-            white-space: nowrap;
+            margin: 0; overflow: hidden; background-color: #111; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            touch-action: none; 
+            user-select: none;
+            -webkit-user-select: none;
         }
 
-        /* 顶部重置区 */
-        #top-controls {
-            position: absolute; top: 15px; right: 15px; z-index: 1000;
-            display: flex; gap: 10px;
+        /* 顶部状态提示 */
+        #status-pill {
+            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8); color: #0f0;
+            padding: 8px 20px; border-radius: 30px; font-size: 14px; font-weight: bold;
+            pointer-events: none; z-index: 2000; display: flex; align-items: center; gap: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            border: 1px solid #333;
         }
-        .icon-btn {
-            background: rgba(0,0,0,0.5); border: 1px solid #555; color: white;
-            width: 40px; height: 40px; border-radius: 50%;
-            font-size: 18px; display: flex; align-items: center; justify-content: center;
-            cursor: pointer; backdrop-filter: blur(4px);
-        }
-        .icon-btn:active { background: #444; transform: scale(0.95); }
 
-        /* 底部工具栏 */
-        #toolbar {
-            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
-            background: rgba(30, 30, 30, 0.9);
-            padding: 8px 15px; border-radius: 50px;
-            display: flex; gap: 15px; align-items: center;
-            border: 1px solid #555;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+        /* 模式指示器 (屏幕中央下方) */
+        #mode-indicator {
+            position: absolute; bottom: 120px; left: 0; width: 100%;
+            text-align: center; pointer-events: none; z-index: 900;
+            opacity: 0; transition: opacity 0.3s;
+        }
+        .mode-tag {
+            background: rgba(0, 123, 255, 0.8); color: white;
+            padding: 6px 12px; border-radius: 4px; font-size: 12px;
+            display: inline-block; text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+        }
+
+        /* 底部主控栏 */
+        #dock {
+            position: absolute; bottom: 20px; left: 20px; right: 20px;
+            height: 70px;
+            background: rgba(30, 30, 30, 0.95);
+            border-radius: 20px;
+            display: flex; justify-content: space-around; align-items: center;
+            border: 1px solid #444;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.8);
             z-index: 1000;
+            padding: 0 10px;
         }
 
-        .tool-btn {
-            background: transparent; border: none; color: #999;
-            width: 44px; height: 44px; border-radius: 50%; /* 圆形按钮，触控面积更大 */
-            cursor: pointer; font-size: 20px; display: flex; align-items: center; justify-content: center;
-            transition: all 0.2s;
+        /* 大按钮样式 */
+        .dock-btn {
+            width: 55px; height: 55px;
+            border-radius: 12px; border: none;
+            background: transparent; color: #888;
+            font-size: 24px; display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            cursor: pointer; position: relative;
+            transition: all 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
         
-        /* 选中状态 */
-        .tool-btn.active { 
-            background: #007bff; color: white; 
-            box-shadow: 0 0 10px rgba(0,123,255,0.5);
-        }
+        .dock-btn span { font-size: 10px; margin-top: 4px; font-weight: 500; }
         
-        /* 关闭/隐藏 Gizmo 按钮的样式 */
-        #btn-close-gizmo {
-            border-left: 1px solid #555; padding-left: 15px; margin-left: 5px;
-            color: #ff5555;
+        /* 激活状态 */
+        .dock-btn.active { 
+            background: #333; color: #00ff88; transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0,255,136,0.2);
         }
-        #btn-close-gizmo.active { background: #ff5555; color: white; }
+        /* 激活时的图标颜色 */
+        .dock-btn.active.mode-move { color: #ff5555; box-shadow: 0 5px 15px rgba(255,85,85,0.2); }
+        .dock-btn.active.mode-rotate { color: #55ff55; box-shadow: 0 5px 15px rgba(85,255,85,0.2); }
+        .dock-btn.active.mode-scale { color: #5555ff; box-shadow: 0 5px 15px rgba(85,85,255,0.2); }
 
+        /* 分割线 */
+        .divider { width: 1px; height: 40px; background: #555; }
+
+        /* 加载条 */
+        #progress { position: absolute; top:0; left:0; height:3px; background:#00ff88; width:0%; transition:width 0.2s; z-index:3000; }
+
+        /* 提示遮罩 */
+        #tip-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center;
+            z-index: 5000; color: white; text-align: center; pointer-events: none;
+            opacity: 0; transition: opacity 0.5s;
+        }
     </style>
 
     <script type="importmap">
@@ -80,22 +99,38 @@
 </head>
 <body>
 
-    <div id="loader-bar"></div>
-    <div id="status-text">初始化触控环境...</div>
+    <div id="progress"></div>
+    <div id="status-pill"><span>📡</span> <span id="status-msg">初始化...</span></div>
+    
+    <!-- 模式提示 -->
+    <div id="mode-indicator"><span class="mode-tag" id="mode-text">👀 浏览模式：单指旋转，双指缩放</span></div>
 
-    <div id="top-controls">
-        <button class="icon-btn" id="reset-view" title="重置视角">🎥</button>
-        <button class="icon-btn" id="reset-model" title="重置模型">↺</button>
-    </div>
-
-    <div id="toolbar">
-        <button class="tool-btn active" id="btn-translate">✢</button>
-        <button class="tool-btn" id="btn-rotate">↻</button>
-        <button class="tool-btn" id="btn-scale">⤢</button>
+    <!-- 底部 Dock 栏 -->
+    <div id="dock">
+        <!-- 浏览模式 (默认) -->
+        <button class="dock-btn active" id="btn-view" onclick="setMode('view')">
+            <span>👁️</span><span>浏览</span>
+        </button>
         
-        <!-- 新增：完成按钮，点击后隐藏坐标轴，纯享视角 -->
-        <div style="width:1px; height:20px; background:#555;"></div>
-        <button class="tool-btn" id="btn-none" title="隐藏控制器 (纯浏览)">👁️</button>
+        <div class="divider"></div>
+
+        <!-- 编辑工具 -->
+        <button class="dock-btn mode-move" id="btn-translate" onclick="setMode('translate')">
+            <span>✢</span><span>移动</span>
+        </button>
+        <button class="dock-btn mode-rotate" id="btn-rotate" onclick="setMode('rotate')">
+            <span>↻</span><span>旋转</span>
+        </button>
+        <button class="dock-btn mode-scale" id="btn-scale" onclick="setMode('scale')">
+            <span>⤢</span><span>缩放</span>
+        </button>
+
+        <div class="divider"></div>
+
+        <!-- 重置 -->
+        <button class="dock-btn" id="btn-reset" onclick="resetAll()">
+            <span>↺</span><span>重置</span>
+        </button>
     </div>
 
     <script type="module">
@@ -103,179 +138,188 @@
         import { TransformControls } from 'three/addons/controls/TransformControls.js';
         import { Viewer } from '@mkkellogg/gaussian-splats-3d';
 
+        // 你的模型链接
         const MODEL_URL = 'https://huggingface.co/datasets/liu1230/my-3dgs/resolve/main/scene.splat';
-        
-        const statusBar = document.getElementById('loader-bar');
-        const statusText = document.getElementById('status-text');
-        
-        let viewer, transformControl, splatMesh;
 
+        // 全局变量
+        let viewer, transformControl, splatMesh;
+        let currentMode = 'view'; // view | translate | rotate | scale
+        
+        const ui = {
+            bar: document.getElementById('progress'),
+            msg: document.getElementById('status-msg'),
+            pill: document.getElementById('status-pill'),
+            indicator: document.getElementById('mode-indicator'),
+            modeText: document.getElementById('mode-text'),
+            btns: document.querySelectorAll('.dock-btn')
+        };
+
+        // --- 1. 初始化引擎 ---
         async function init() {
-            // 1. 初始化 Viewer
             viewer = new Viewer({
                 'cameraUp': [0, 1, 0],
                 'initialCameraPosition': [0, 2, 5],
                 'initialCameraLookAt': [0, 0, 0],
                 'useBuiltInControls': true, 
-                'sharedMemoryForWorkers': false
+                'sharedMemoryForWorkers': false,
+                'splatAlphaRemovalThreshold': 5 // 提高一点阈值，减少噪点
             });
             
-            // 关键优化：手动设置 Canvas 样式，确保 iOS/Android 触摸事件不穿透
+            // 解决触摸穿透的关键
             viewer.renderer.domElement.style.touchAction = 'none';
             document.body.appendChild(viewer.renderer.domElement);
 
-            // 2. 添加网格辅助 (方便看地平线)
+            // 添加网格地面 (参考系)
             const grid = new THREE.GridHelper(20, 20, 0x444444, 0x222222);
+            grid.position.y = -1; //稍微下沉一点
             viewer.threeScene.add(grid);
 
-            // 3. 初始化变换控制器
-            setupTransformControls();
+            // 初始化编辑控制器
+            setupGizmo();
 
-            // 4. 加载
+            // 开始下载
             try {
-                const splatBuffer = await downloadWithProgress(MODEL_URL);
-                await loadSplatFromBuffer(splatBuffer);
-            } catch (err) {
-                statusText.innerText = "❌ " + err.message;
-                statusBar.style.backgroundColor = 'red';
+                ui.msg.innerText = "正在下载模型...";
+                const buffer = await download(MODEL_URL);
+                await loadSplat(buffer);
+            } catch (e) {
+                ui.msg.innerText = "❌ 错误: " + e.message;
+                ui.pill.style.borderColor = "#f00";
             }
         }
 
-        function setupTransformControls() {
+        // --- 2. 配置 Gizmo (坐标轴) ---
+        function setupGizmo() {
             transformControl = new TransformControls(viewer.camera, viewer.renderer.domElement);
             
-            // 💡 优化 A: 增大控制器尺寸 (默认为1，设为1.5方便手指拖拽)
-            transformControl.setSize(1.5);
-            
-            // 💡 优化 B: 拖拽时禁用相机控制器
-            transformControl.addEventListener('dragging-changed', function (event) {
-                if (viewer.controls) {
-                    viewer.controls.enabled = !event.value;
-                }
-            });
+            // 📱 移动端优化：加大尺寸，更容易点中
+            transformControl.setSize(1.2); 
+            transformControl.setSpace('local'); // 本地坐标系编辑
 
-            // 💡 优化 C: 监听 change 事件，模型动的时候强制渲染一帧
-            // 有些手机为了省电，静态时不渲染，导致拖动看起来卡顿
-            transformControl.addEventListener('change', () => {
-                // gaussian-splats-3d 是自动循环渲染的，通常不需要手动 requestRender
-                // 但如果用了按需渲染模式，这里需要 viewer.renderer.render(...)
+            // 事件：当拖拽开始时
+            transformControl.addEventListener('dragging-changed', (event) => {
+                // 如果正在拖拽 Gizmo，强制禁用相机，以防万一
+                if (viewer.controls) viewer.controls.enabled = !event.value;
             });
 
             viewer.threeScene.add(transformControl);
         }
 
-        // 下载逻辑
-        async function downloadWithProgress(url) {
-            statusText.innerText = "正在连接...";
-            const response = await fetch(url);
-            if (!response.ok) throw new Error("下载失败");
+        // --- 3. 下载与加载逻辑 ---
+        async function download(url) {
+            const resp = await fetch(url);
+            if (!resp.ok) throw new Error("网络错误 " + resp.status);
             
-            const contentLength = +response.headers.get('Content-Length');
-            const reader = response.body.getReader();
-            let received = 0; 
-            let chunks = []; 
+            const len = +resp.headers.get('Content-Length');
+            const reader = resp.body.getReader();
+            let received = 0;
+            let chunks = [];
 
             while(true) {
                 const {done, value} = await reader.read();
                 if (done) break;
                 chunks.push(value);
                 received += value.length;
-                if(contentLength) statusBar.style.width = (received/contentLength)*100 + "%";
-                statusText.innerText = `下载中 ${(received/1024/1024).toFixed(1)} MB`;
+                if(len) ui.bar.style.width = (received/len)*100 + "%";
             }
             return new Blob(chunks);
         }
 
-        // 加载逻辑
-        async function loadSplatFromBuffer(blob) {
-            statusText.innerText = "正在解析...";
+        async function loadSplat(blob) {
+            ui.msg.innerText = "解析数据中...";
             const url = URL.createObjectURL(blob) + '#.splat';
-            await viewer.addSplatScene(url, { 'splatAlphaRemovalThreshold': 5, 'showLoadingUI': false });
             
+            // 加载
+            await viewer.addSplatScene(url, { 'showLoadingUI': false });
+            
+            // 获取对象
             splatMesh = viewer.getSplatScene(0);
+            
             if (splatMesh) {
-                transformControl.attach(splatMesh); // 默认附着
-                statusText.innerText = "✅ 就绪";
-                setTimeout(() => { 
-                    statusText.style.display = 'none'; 
-                    statusBar.style.width = '0%'; 
-                }, 1000);
+                ui.msg.innerText = "✅ 就绪";
+                setTimeout(() => ui.pill.style.display = 'none', 2000);
                 viewer.start();
+                
+                // 默认进入浏览模式
+                setMode('view');
             }
         }
 
-        // === 按钮交互逻辑 ===
+        // --- 4. 核心：模式切换逻辑 ---
         
-        // 模式切换
-        const modes = {
-            'btn-translate': 'translate',
-            'btn-rotate': 'rotate',
-            'btn-scale': 'scale'
-        };
+        // 将函数挂载到 window 以便 HTML onclick 调用
+        window.setMode = function(mode) {
+            currentMode = mode;
+            
+            // 1. 更新 UI 高亮
+            ui.btns.forEach(b => b.classList.remove('active'));
+            const btnId = mode === 'view' ? 'btn-view' : 
+                          mode === 'translate' ? 'btn-translate' : 
+                          mode === 'rotate' ? 'btn-rotate' : 'btn-scale';
+            document.getElementById(btnId).classList.add('active');
 
-        // 绑定移动/旋转/缩放
-        Object.keys(modes).forEach(id => {
-            document.getElementById(id).addEventListener('touchstart', (e) => {
-                // 使用 touchstart 响应更快
-                e.preventDefault(); 
-                activateMode(id, modes[id]);
-            }, {passive: false}); // passive: false 允许 preventDefault
-
-            // 兼容鼠标点击
-            document.getElementById(id).addEventListener('click', () => activateMode(id, modes[id]));
-        });
-
-        function activateMode(btnId, mode) {
+            // 2. 状态机逻辑 (关键！)
             if (!splatMesh) return;
-            
-            // 确保 Gizmo 可见并附着
-            transformControl.visible = true;
-            transformControl.enabled = true;
-            transformControl.attach(splatMesh);
-            transformControl.setMode(mode);
 
-            // 更新 UI
-            updateActiveButton(btnId);
-        }
+            if (mode === 'view') {
+                // === 浏览模式 ===
+                // 隐藏 Gizmo
+                transformControl.detach();
+                transformControl.enabled = false; 
+                
+                // 解锁相机
+                if(viewer.controls) viewer.controls.enabled = true;
 
-        // 绑定“隐藏/预览”按钮
-        const btnNone = document.getElementById('btn-none');
-        const hideHandler = (e) => {
-            if(e.type === 'touchstart') e.preventDefault();
-            
-            // 隐藏 Gizmo
-            transformControl.detach();
-            transformControl.visible = false;
-            transformControl.enabled = false;
-            
-            // 确保相机控制权完全回归
-            if (viewer.controls) viewer.controls.enabled = true;
+                // 提示
+                showToast("👀 浏览模式：单指旋转，双指缩放");
 
-            updateActiveButton('btn-none');
-        };
-        btnNone.addEventListener('touchstart', hideHandler, {passive: false});
-        btnNone.addEventListener('click', hideHandler);
+            } else {
+                // === 编辑模式 (移动/旋转/缩放) ===
+                // 附着 Gizmo
+                transformControl.attach(splatMesh);
+                transformControl.setMode(mode);
+                transformControl.enabled = true;
 
-        function updateActiveButton(activeId) {
-            document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
-            document.getElementById(activeId).classList.add('active');
-        }
+                // 🔒 锁定相机：防止在编辑时误触旋转视角
+                if(viewer.controls) viewer.controls.enabled = false;
 
-        // 顶部重置功能
-        document.getElementById('reset-view').addEventListener('click', () => {
-            viewer.camera.position.set(0, 2, 5);
-            viewer.camera.lookAt(0, 0, 0);
-            if(viewer.controls) viewer.controls.target.set(0,0,0);
-        });
-
-        document.getElementById('reset-model').addEventListener('click', () => {
-            if(splatMesh) {
-                splatMesh.position.set(0,0,0);
-                splatMesh.rotation.set(0,0,0);
-                splatMesh.scale.set(1,1,1);
+                // 提示
+                const actionName = mode==='translate'?'移动':(mode==='rotate'?'旋转':'缩放');
+                showToast(`🔧 ${actionName}模式：拖动轴线 | 相机已锁定`);
             }
-        });
+        };
 
+        window.resetAll = function() {
+            if (confirm("重置模型位置和视角？")) {
+                if(splatMesh) {
+                    splatMesh.position.set(0,0,0);
+                    splatMesh.rotation.set(0,0,0);
+                    splatMesh.scale.set(1,1,1);
+                }
+                viewer.camera.position.set(0, 2, 5);
+                viewer.camera.lookAt(0,0,0);
+                if(viewer.controls) viewer.controls.target.set(0,0,0);
+                
+                setMode('view'); // 重置后回到浏览模式
+            }
+        };
+
+        // 简单的屏幕提示
+        let toastTimer;
+        function showToast(text) {
+            ui.modeText.innerText = text;
+            ui.indicator.style.opacity = 1;
+            
+            // 编辑模式下常驻提示，浏览模式下3秒消失
+            if (currentMode === 'view') {
+                clearTimeout(toastTimer);
+                toastTimer = setTimeout(() => {
+                    ui.indicator.style.opacity = 0;
+                }, 3000);
+            }
+        }
+
+        // 启动
         init();
 
     </script>
