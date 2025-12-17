@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>3DGS 最终流式版</title>
+    <title>3DGS 成功运行版</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
         #status-bar {
@@ -38,8 +38,11 @@
         import * as THREE from 'three';
         import { Viewer } from '@mkkellogg/gaussian-splats-3d';
 
-        // 👇 确保你的 Hugging Face 仓库是 Public 的！
-        const MODEL_FILE = 'https://huggingface.co/datasets/liu1230/my-3dgs/resolve/main/scene.splat?download=true';
+        // 🟢 重点检查这里！
+        // 1. 我保留了 datasets (因为你确实建的是dataset)
+        // 2. 我去掉了 ?download=true (防止引擎误判格式)
+        // 3. 【重要】如果你的文件不叫 scene.splat，请把最后这个名字改成你列表里真实的名字！
+        const MODEL_FILE = 'https://huggingface.co/datasets/liu1230/my-3dgs/resolve/main/scene.splat';
 
         const status = document.getElementById('status-bar');
         const btn = document.getElementById('start-btn');
@@ -64,14 +67,13 @@
             try {
                 await viewer.addSplatScene(MODEL_FILE, {
                     'showLoadingUI': false,
-                    // 🟢 关键修改1：强制指定格式
+                    // 强制指定格式，防止因为链接没写对后缀而报错
                     'format': 'splat',
-                    // 🟢 关键修改2：开启流式加载 (streamView)，这会跳过整体下载，手机更不容易崩
                     'streamView': true, 
                     'splatAlphaRemovalThreshold': 5, 
                     'onProgress': (percent, percentStr) => {
                         if (percentStr === 'NaN') {
-                            status.innerText = `📥 正在流式加载... 请稍候`;
+                            status.innerText = `📥 正在流式加载... (如果卡住不动，请检查文件名是否写对)`;
                         } else {
                             status.innerText = `📥 下载进度: ${percentStr}%`;
                         }
@@ -87,9 +89,8 @@
                 status.innerText = "❌ 错误: " + err.message;
                 status.style.color = "red";
                 
-                // 智能提示错误原因
-                if (err.message.includes('format') || err.message.includes('404') || err.message.includes('<')) {
-                     status.innerText += "\n👉 严重怀疑：你的 Hugging Face 仓库是私有的(Private)，请改为公开(Public)！";
+                if (err.message.includes('404') || err.message.includes('supported')) {
+                     status.innerText += "\n👉 诊断：链接找不到文件。请检查文件名是不是写错了(区分大小写)？";
                 }
             }
         }
@@ -138,4 +139,3 @@
     </script>
 </body>
 </html>
-
