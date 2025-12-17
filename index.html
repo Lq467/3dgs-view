@@ -2,152 +2,72 @@
 <html lang="zh-CN">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>3DGS 最终完美运行版</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>链接照妖镜</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
-        
-        /* 状态提示条 */
-        #status-bar {
-            position: absolute; top: 0; left: 0; width: 100%; 
-            padding: 15px; background: rgba(0,0,0,0.8); 
-            color: #0f0; text-align: center; font-size: 14px; 
-            z-index: 999; pointer-events: none;
-        }
-
-        /* 启动按钮 */
-        #start-btn {
-            position: absolute; bottom: 15%; left: 50%; transform: translateX(-50%);
-            padding: 12px 30px; font-size: 18px; border-radius: 25px;
-            background: white; border: none; cursor: pointer; display: none;
-            z-index: 1000; box-shadow: 0 0 15px rgba(255,255,255,0.5);
-        }
+        body { background: #111; color: #0f0; font-family: monospace; padding: 20px; word-break: break-all; }
+        h3 { border-bottom: 1px solid #444; padding-bottom: 10px; }
+        .log-item { margin-bottom: 10px; padding: 10px; background: #222; border-radius: 5px; }
+        .error { color: #ff5555; }
+        .warn { color: #ffff55; }
+        .success { color: #55ff55; }
     </style>
-
-    <!-- 🟢 引擎核心 v0.4.7 (修复所有已知报错) -->
-    <script type="importmap">
-    {
-        "imports": {
-            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
-            "@mkkellogg/gaussian-splats-3d": "https://unpkg.com/@mkkellogg/gaussian-splats-3d@0.4.7/build/gaussian-splats-3d.module.js"
-        }
-    }
-    </script>
 </head>
 <body>
+    <h3>🕵️‍♂️ 链接成分分析器</h3>
+    <div id="logs"></div>
 
-    <div id="status-bar">正在连接服务器...</div>
-    <button id="start-btn">开启陀螺仪</button>
+    <script>
+        // 👇 这里填你一直报错的那个链接
+        const TEST_URL = 'https://huggingface.co/datasets/liu1230/my-3dgs/resolve/main/scene.splat';
 
-    <script type="module">
-        import * as THREE from 'three';
-        import { Viewer } from '@mkkellogg/gaussian-splats-3d';
+        const logDiv = document.getElementById('logs');
+        function log(msg, type='normal') {
+            const div = document.createElement('div');
+            div.className = 'log-item ' + type;
+            div.innerHTML = msg;
+            logDiv.appendChild(div);
+        }
 
-        // ✅ 已修正：将 blob 替换为 resolve，这才是真正的文件下载链接
-        const MODEL_FILE = 'https://huggingface.co/datasets/liu1230/my-3dgs/resolve/main/scene.splat';
-
-        const status = document.getElementById('status-bar');
-        const btn = document.getElementById('start-btn');
-        let viewer;
-        let isRunning = false;
-        let initialGyro = null;
-        
-        // 陀螺仪防穿帮：限制上下左右转动的角度
-        const CLAMP_X = 0.5; // 上下约30度
-        const CLAMP_Y = 0.6; // 左右约35度
-
-        async function main() {
-            // 初始化引擎
-            viewer = new Viewer({
-                'cameraUp': [0, 1, 0],
-                'initialCameraPosition': [0, 1, 4], // 相机往后拉一点
-                'initialCameraLookAt': [0, 0, 0],
-                'sharedMemoryForWorkers': false, // 兼容性设置
-            });
-            document.body.appendChild(viewer.renderer.domElement);
-
-            status.innerText = "正在请求文件...";
+        async function analyze() {
+            log(`🚀 1. 正在请求链接: <br><small>${TEST_URL}</small>`);
             
             try {
-                await viewer.addSplatScene(MODEL_FILE, {
-                    'showLoadingUI': false,
-                    'format': 'splat',       // 强制指定格式，防止引擎误判
-                    'streamView': true,      // 开启流式加载，一边下一边看，防止手机内存爆
-                    'splatAlphaRemovalThreshold': 5, // 移除背景杂点
-                    'onProgress': (percent, percentStr) => {
-                        if (percentStr === 'NaN') {
-                            status.innerText = `📥 正在加载数据流... (请稍候)`;
-                        } else {
-                            status.innerText = `📥 下载进度: ${percentStr}%`;
-                        }
-                    }
-                });
+                const response = await fetch(TEST_URL);
+                log(`📡 2. 服务器状态码: <b>${response.status}</b>`);
 
-                // 加载成功！
-                status.innerText = "✅ 模型加载完成！";
-                status.style.color = "#fff";
-                btn.style.display = "block";
+                if (!response.ok) {
+                    log(`❌ 请求失败！状态码不是 200。可能是 404 (找不到) 或 403 (无权限)。`, 'error');
+                    return;
+                }
+
+                // 读取前 200 个字符
+                const text = await response.text();
+                const head = text.substring(0, 300);
+                
+                // 转义 HTML 标签以便显示
+                const safeHead = head.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+                log(`📝 3. 文件开头内容 (前300字符):<br><br><code style="color:white">${safeHead}</code>`);
+
+                // === 核心分析逻辑 ===
+                if (head.includes('<!DOCTYPE html>') || head.includes('<html')) {
+                    log(`❌ <b>破案了！这是一张网页！</b>`, 'error');
+                    log(`👉 原因分析：<br>虽然链接是 .splat 结尾，但服务器返回了 HTML 页面。<br>这通常意味着：<br>1. 需要登录 (Redirect to login)<br>2. 仓库虽然公开，但需要<b>"同意协议"</b> (Gated Dataset)<br>3. 链接路径里有大小写错误，跳到了 404 页面。`, 'warn');
+                } else if (head.startsWith('version https://git-lfs')) {
+                    log(`⚠️ <b>这是 LFS 指针文件！</b>`, 'warn');
+                    log(`👉 原因分析：<br>你下载到了 Git LFS 的纯文本指针，而不是二进制大文件。<br>这通常是因为 Hugging Face 的 CDN 还没缓存好，或者下载方式不对。`, 'warn');
+                } else {
+                    log(`✅ <b>恭喜！看起来是二进制乱码！</b>`, 'success');
+                    log(`👉 这说明链接没问题。如果引擎还报错，那只能是引擎版本太旧，或者文件本身损坏了。`, 'success');
+                }
 
             } catch (err) {
-                console.error(err);
-                status.innerText = "❌ 错误: " + err.message;
-                status.style.color = "red";
+                log(`❌ 网络崩溃: ${err.message}`, 'error');
             }
         }
 
-        // 按钮点击：开始渲染并请求陀螺仪
-        btn.addEventListener('click', () => {
-            btn.style.display = 'none';
-            status.style.display = 'none';
-            viewer.start();
-            isRunning = true;
-            requestGyro();
-        });
-
-        // 申请权限 (针对 iOS)
-        function requestGyro() {
-            if (typeof DeviceOrientationEvent !== 'undefined' && 
-                typeof DeviceOrientationEvent.requestPermission === 'function') {
-                DeviceOrientationEvent.requestPermission()
-                    .then(response => {
-                        if (response === 'granted') {
-                            window.addEventListener('deviceorientation', handleOrientation);
-                        } else {
-                            alert('需要允许陀螺仪权限才能控制视角');
-                        }
-                    }).catch(console.error);
-            } else {
-                // 安卓直接监听
-                window.addEventListener('deviceorientation', handleOrientation);
-            }
-        }
-
-        // 陀螺仪逻辑
-        function handleOrientation(event) {
-            if (!viewer || !isRunning) return;
-            
-            // 记录初始角度作为零点
-            if (!initialGyro && event.alpha !== null) {
-                initialGyro = { beta: event.beta, gamma: event.gamma };
-                return;
-            }
-            if (!initialGyro) return;
-
-            // 计算相对转动
-            let deltaX = (event.beta - initialGyro.beta) * (Math.PI / 180);
-            let deltaY = (event.gamma - initialGyro.gamma) * (Math.PI / 180);
-
-            // 限制范围 (防穿帮)
-            deltaX = Math.max(-CLAMP_X, Math.min(CLAMP_X, deltaX));
-            deltaY = Math.max(-CLAMP_Y, Math.min(CLAMP_Y, deltaY));
-
-            // 应用旋转
-            viewer.camera.rotation.set(deltaX, deltaY, 0, 'YXZ');
-            viewer.update();
-        }
-
-        main();
+        analyze();
     </script>
 </body>
 </html>
