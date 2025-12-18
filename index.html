@@ -3,50 +3,44 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3DGS Object Grip</title>
+    <title>3DGS Perfect Subtle</title>
     <style>
-        /* 基础环境 */
         body, html {
             width: 100%; height: 100%; margin: 0; padding: 0;
             overflow: hidden; background-color: #000;
             touch-action: none; font-family: -apple-system, sans-serif; user-select: none;
         }
 
-        /* 顶部提示 */
         #top-bar {
             position: absolute; top: 0; left: 0; width: 100%; height: 80px;
-            background: linear-gradient(to bottom, rgba(0,0,0,0.9), transparent);
-            display: flex; justify-content: center; padding-top: 20px;
-            pointer-events: none; z-index: 100;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent);
+            pointer-events: none; z-index: 100; display: flex; justify-content: center; padding-top: 20px;
         }
         .pill {
-            background: rgba(30,30,30,0.6); color: #fff; padding: 8px 20px;
-            border-radius: 30px; font-size: 14px; border: 1px solid rgba(255,255,255,0.2);
-            backdrop-filter: blur(5px); transition: all 0.3s;
+            background: rgba(20,20,20,0.8); color: #fff; padding: 6px 16px;
+            border-radius: 20px; font-size: 13px; border: 1px solid rgba(255,255,255,0.2);
+            transition: all 0.3s;
         }
         .pill.active {
             border-color: #00ff88; color: #00ff88; background: rgba(0, 255, 136, 0.15);
-            box-shadow: 0 0 20px rgba(0,255,136,0.2);
         }
 
-        /* 底部按钮 */
         #controls {
             position: absolute; bottom: 50px; left: 0; width: 100%;
-            display: flex; justify-content: center; gap: 40px;
+            display: flex; justify-content: center; gap: 30px;
             pointer-events: none; z-index: 100;
         }
         .btn {
             pointer-events: auto;
-            width: 70px; height: 70px; border-radius: 50%; border: 2px solid #444;
-            background: rgba(30,30,30,0.9); color: #ccc; font-size: 28px;
+            width: 64px; height: 64px; border-radius: 50%; border: 2px solid #555;
+            background: rgba(30,30,30,0.9); color: #ccc; font-size: 26px;
             display: flex; align-items: center; justify-content: center;
-            cursor: pointer; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            cursor: pointer; box-shadow: 0 8px 30px rgba(0,0,0,0.5);
             transition: transform 0.1s, border-color 0.3s;
         }
-        .btn:active { transform: scale(0.9); }
+        .btn:active { transform: scale(0.95); }
         .btn.active { border-color: #00ff88; color: #00ff88; background: #002211; }
 
-        /* 加载动画 */
         #loader {
             position: absolute; top:0; left:0; width:100%; height:100%; background:#000;
             display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:9999;
@@ -67,12 +61,12 @@
 <body>
 
     <div id="loader">
-        <div style="font-size:50px;">🗿</div>
-        <div class="loader-text">加载模型中...</div>
+        <div style="font-size:40px;">💎</div>
+        <div class="loader-text">加载高精模型...</div>
     </div>
 
     <div id="top-bar">
-        <div class="pill" id="status-msg">👆 手指滑动调整最佳角度</div>
+        <div class="pill" id="status-msg">👆 手指滑动调整 - 📱 开启微调</div>
     </div>
 
     <div id="controls">
@@ -85,7 +79,6 @@
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
         import { Viewer } from '@mkkellogg/gaussian-splats-3d';
 
-        // 依然基于这个最稳的版本
         const MODEL_URL = 'https://huggingface.co/datasets/liu1230/my-3dgs/resolve/main/scene.splat';
 
         class App {
@@ -94,19 +87,24 @@
                 this.controls = null;
                 this.isGyroOn = false;
 
-                // 陀螺仪计算变量
+                // 陀螺仪数据
                 this.startBeta = 0;
                 this.startGamma = 0;
                 this.currBeta = 0;
                 this.currGamma = 0;
+
+                // 核心：球坐标系 (解决跳变问题的关键)
+                this.spherical = new THREE.Spherical();
+                this.baseTheta = 0; // 开启时的水平角
+                this.basePhi = 0;   // 开启时的垂直角
                 
-                // 核心：记录基准位置向量（而不是旋转四元数）
-                this.basePosition = new THREE.Vector3(); 
-                this.cameraTarget = new THREE.Vector3(0, 0, 0); // 假设模型在中心
+                // 平滑插值目标
+                this.targetTheta = 0;
+                this.targetPhi = 0;
             }
 
             async init() {
-                // 1. Viewer 配置 (保持原样，最稳)
+                // 1. Viewer
                 this.viewer = new Viewer({
                     'cameraUp': [0, 1, 0],
                     'initialCameraPosition': [0, 1, 5],
@@ -116,31 +114,30 @@
                     'sharedMemoryForWorkers': false
                 });
 
-                // 强制 Canvas 全屏
                 const canvas = this.viewer.renderer.domElement;
                 canvas.style.position = 'absolute'; canvas.style.top = '0'; canvas.style.zIndex = '0';
                 document.body.appendChild(canvas);
 
-                // 2. 触控配置 (OrbitControls)
+                // 2. Controls
                 this.controls = new OrbitControls(this.viewer.camera, document.body);
                 this.controls.enableDamping = true;
                 this.controls.dampingFactor = 0.05;
                 this.controls.minDistance = 0.1;
                 this.controls.maxDistance = 100;
 
-                // 3. 监听陀螺仪数据
+                // 3. 监听设备
                 window.addEventListener('deviceorientation', (e) => {
                     this.currBeta = e.beta || 0;
                     this.currGamma = e.gamma || 0;
                 });
 
-                // 4. 渲染循环
+                // 4. 循环
                 this.animate();
 
-                // 5. 加载模型
+                // 5. 加载
                 await this.loadModel();
-
-                // 6. 绑定按钮
+                
+                // 6. 绑定
                 this.bindEvents();
             }
 
@@ -149,7 +146,6 @@
                 const blob = await resp.blob();
                 const url = URL.createObjectURL(blob) + '#.splat';
                 await this.viewer.addSplatScene(url, { 'showLoadingUI': false });
-                
                 document.getElementById('loader').style.display = 'none';
             }
 
@@ -179,19 +175,28 @@
                     this.startBeta = this.currBeta;
                     this.startGamma = this.currGamma;
 
-                    // 2. 核心：记录相机相对于中心点的初始位置向量
-                    // 这样我们是基于“当前位置”进行偏移，而不是重置视角
-                    this.basePosition.copy(this.viewer.camera.position).sub(this.cameraTarget);
+                    // 2. 核心修复：计算当前相机相对于 Target 的球坐标
+                    // 这一步保证了“无缝衔接”，绝对不会跳变
+                    const offset = this.viewer.camera.position.clone().sub(this.controls.target);
+                    this.spherical.setFromVector3(offset);
+
+                    // 3. 记录基准经纬度
+                    this.baseTheta = this.spherical.theta;
+                    this.basePhi = this.spherical.phi;
+                    
+                    // 初始化平滑目标
+                    this.targetTheta = this.baseTheta;
+                    this.targetPhi = this.basePhi;
 
                     btn.classList.add('active');
                     msg.classList.add('active');
-                    msg.innerText = "📱 倾斜手机把玩模型";
+                    msg.innerText = "📱 微调模式 (角度已限制)";
                 } else {
                     // === 关闭陀螺仪 ===
                     this.controls.enabled = true; // 恢复手指
                     btn.classList.remove('active');
                     msg.classList.remove('active');
-                    msg.innerText = "👆 手指滑动调整最佳角度";
+                    msg.innerText = "👆 手指滑动调整";
                 }
             }
 
@@ -200,49 +205,50 @@
 
                 if (this.isGyroOn) {
                     // ==============================
-                    // 🌟 核心算法：轨道公转 (Orbit)
+                    // 🌟 修正后的微调算法
                     // ==============================
 
                     // 1. 算出偏移量
-                    let deltaX = this.currBeta - this.startBeta;   // 上下倾斜
-                    let deltaY = this.currGamma - this.startGamma; // 左右倾斜
+                    let deltaX = this.currBeta - this.startBeta;   // 上下
+                    let deltaY = this.currGamma - this.startGamma; // 左右
 
-                    // 2. 限制角度 (最大20度，防止穿帮)
-                    const MAX_DEG = 20; 
+                    // 2. 限制角度 (大幅缩小！)
+                    // 之前是 20度，现在改成 5度 (约 0.08弧度)
+                    // 这样晃动手机时，模型只会很克制地动一点点
+                    const MAX_DEG = 8; 
                     deltaX = Math.max(-MAX_DEG, Math.min(MAX_DEG, deltaX));
                     deltaY = Math.max(-MAX_DEG, Math.min(MAX_DEG, deltaY));
 
-                    // 3. 转换逻辑 (根据你的要求反转)
-                    // 手机向左倾斜 (Gamma 负数) -> 我们希望模型向左转 -> 相当于相机向左公转
-                    // 手指右滑 = 相机向左公转 = Gamma 负数
+                    // 3. 转换逻辑 (球坐标偏移)
+                    // 手机左倾 (Gamma负) -> 相机左飞 (Theta减少) -> 模型看起来左转
+                    // 手机上抬 (Beta正) -> 相机上飞 (Phi减少，注意Phi从顶端0开始) -> 模型看起来上转
                     
-                    const sensitivity = 0.02; // 系数，越小越平滑
+                    const sensitivity = 0.005; // 极低灵敏度，保证微调感
 
-                    // 4. 计算旋转矩阵
-                    // 绕 Y 轴转 (左右) -> 对应 Gamma
-                    // 注意方向：deltaY 为负时 (左倾)，我们希望相机向左跑，所以角度也是负的
-                    const rotateY = deltaY * sensitivity * 1.5; // 1.5倍让左右灵敏点
-                    
-                    // 绕 相机右向量 转 (上下) -> 对应 Beta
-                    const rotateX = deltaX * sensitivity;
+                    const offsetTheta = deltaY * sensitivity * 3.0; // 左右稍微灵敏点
+                    const offsetPhi = -deltaX * sensitivity * 2.0;  // 上下 (注意负号)
 
-                    // 5. 应用旋转到 Position 向量上
-                    const tempPos = this.basePosition.clone();
-                    
-                    // 先左右转 (绕世界Y轴)
-                    tempPos.applyAxisAngle(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(-deltaY * 2)); // 负号修正方向
+                    // 4. 计算目标球坐标 (基准 + 偏移)
+                    // 这样永远是在“开启那一刻”的视角附近晃动，绝不跑偏
+                    const desiredTheta = this.baseTheta - offsetTheta;
+                    const desiredPhi = this.basePhi - offsetPhi;
 
-                    // 再上下转 (绕相机本地X轴) - 这样更自然，像拿在手里
-                    // 获取当前相机的右向量
-                    const cameraRight = new THREE.Vector3(1, 0, 0).applyQuaternion(this.viewer.camera.quaternion);
-                    tempPos.applyAxisAngle(cameraRight, THREE.MathUtils.degToRad(-deltaX * 2));
+                    // 限制垂直角度防止翻转 (Phi 必须在 0.1 ~ PI-0.1 之间)
+                    const safePhi = Math.max(0.1, Math.min(Math.PI - 0.1, desiredPhi));
 
-                    // 6. 更新相机位置
-                    const targetPos = this.cameraTarget.clone().add(tempPos);
-                    
-                    // 使用 lerp 平滑插值，消除抖动
-                    this.viewer.camera.position.lerp(targetPos, 0.1);
-                    this.viewer.camera.lookAt(this.cameraTarget);
+                    // 5. 平滑插值 (Lerp)
+                    // 让数值慢慢追赶，而不是生硬变化
+                    this.targetTheta += (desiredTheta - this.targetTheta) * 0.1;
+                    this.targetPhi += (safePhi - this.targetPhi) * 0.1;
+
+                    // 6. 应用回相机
+                    this.spherical.theta = this.targetTheta;
+                    this.spherical.phi = this.targetPhi;
+                    this.spherical.makeSafe();
+
+                    // 从球坐标转回 XYZ 坐标，并加上 Target 偏移
+                    this.viewer.camera.position.setFromSpherical(this.spherical).add(this.controls.target);
+                    this.viewer.camera.lookAt(this.controls.target);
 
                 } else {
                     // 触控模式
